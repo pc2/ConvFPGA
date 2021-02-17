@@ -8,5 +8,12 @@
 
 extern void conv3D();
 
+/**
+ * Single Precision Complex Floating Point Data Structure
+ */
+typedef struct {
+  float x; /**< real value */
+  float y; /**< imaginary value */
+} float2;
 
 #endif

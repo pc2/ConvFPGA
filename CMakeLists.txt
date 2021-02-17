@@ -7,15 +7,24 @@ project(Convolution
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
-#configure_file(
-#  "${CMAKE_CURRENT_SOURCE_DIR}/include/config.h.in"
-#  "${CMAKE_BINARY_DIR}/include/config.h"
-#  ESCAPE_QUOTES
-#)
+message("-- Building external dependencies")
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/extDep.cmake)
+
+find_package(IntelFPGAOpenCL REQUIRED)
+message("-- IntelFPGAOpenCL found")
 
 # build source
+message("-- Building host code")
 add_subdirectory(src)
 
+# build kernel
+message("-- Building kernel code")
+message("  -- Generating Custom Targets")
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/genKernelTargets.cmake)
+add_subdirectory(kernels)
+
 # build tests
+message("-- Building tests")
 add_subdirectory(tests)
 enable_testing()
+
