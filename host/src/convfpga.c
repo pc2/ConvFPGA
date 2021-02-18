@@ -108,7 +108,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   int chan_out = CHAN_NOT_OUT;
   status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set store kernel arg");
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&chan_out);
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
 
   // Kernel Execution
@@ -194,7 +194,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   chan_out = CHAN_OUT;
   status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set store kernel arg 0");
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&chan_out);
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
 
   status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
@@ -277,7 +277,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   chan_out = CHAN_NOT_OUT;
   status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf2);
   checkError(status, "Failed to set store kernel arg");
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&chan_out);
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
 
   // Kernel Execution
