@@ -2,7 +2,7 @@
 # Arjun Ramaswami
 cmake_minimum_required(VERSION 3.10)
 
-project(conv-kernels VERSION 1.0
+project(convKernels VERSION 1.0
             DESCRIPTION "Kernels for 3D FFT based convolution using FPGAs"
             LANGUAGES C CXX)
 
@@ -70,7 +70,7 @@ separate_arguments(PROF_FLAGS)
 #   - ${kernel_name}_rep: to generate report
 #   - ${kernel_name}_syn: to generate synthesis binary
 ##
-set(CL_PATH "${conv-kernels_SOURCE_DIR}")
+set(CL_PATH "${convKernels_SOURCE_DIR}")
 set(kernels conv3D)
 
 if (INTELFPGAOPENCL_FOUND)

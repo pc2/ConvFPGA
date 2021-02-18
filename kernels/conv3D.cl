@@ -554,14 +554,24 @@ kernel void conv3D(
     signal.i6 = read_channel_intel(chaninConv[6]);
     signal.i7 = read_channel_intel(chaninConv[7]);
 
-    dest[index_rd + 0] = filter.i0 * signal.i0;
-    dest[index_rd + 1] = filter.i1 * signal.i1;
-    dest[index_rd + 2] = filter.i2 * signal.i2;
-    dest[index_rd + 3] = filter.i3 * signal.i3;
-    dest[index_rd + 4] = filter.i4 * signal.i4;
-    dest[index_rd + 5] = filter.i5 * signal.i5;
-    dest[index_rd + 6] = filter.i6 * signal.i6;
-    dest[index_rd + 7] = filter.i7 * signal.i7;
+    // Perform complex multiplication
+    dest[index_rd + 0].x = (signal.i0.x * filter.i0.x) - (signal.i0.y * filter.i0.y);
+    dest[index_rd + 0].y = (signal.i0.x * filter.i0.y) + (signal.i0.y * filter.i0.x); 
+    dest[index_rd + 1].x = (signal.i1.x * filter.i1.x) - (signal.i1.y * filter.i1.y);
+    dest[index_rd + 1].y = (signal.i1.x * filter.i1.y) + (signal.i1.y * filter.i1.x); 
+    dest[index_rd + 2].x = (signal.i2.x * filter.i2.x) - (signal.i2.y * filter.i2.y);
+    dest[index_rd + 2].y = (signal.i2.x * filter.i2.y) + (signal.i2.y * filter.i2.x); 
+    dest[index_rd + 3].x = (signal.i3.x * filter.i3.x) - (signal.i3.y * filter.i3.y);
+    dest[index_rd + 3].y = (signal.i3.x * filter.i3.y) + (signal.i3.y * filter.i3.x); 
+
+    dest[index_rd + 4].x = (filter.i4.x * signal.i4.x) - (filter.i4.y * signal.i4.y);
+    dest[index_rd + 4].y = (filter.i4.x * signal.i4.y) + (filter.i4.y * signal.i4.x); 
+    dest[index_rd + 5].x = (filter.i5.x * signal.i5.x) - (filter.i5.y * signal.i5.y);
+    dest[index_rd + 5].y = (filter.i5.x * signal.i5.y) + (filter.i5.y * signal.i5.x); 
+    dest[index_rd + 6].x = (filter.i6.x * signal.i6.x) - (filter.i6.y * signal.i5.y);
+    dest[index_rd + 6].y = (filter.i6.x * signal.i6.y) + (filter.i6.y * signal.i6.x); 
+    dest[index_rd + 7].x = (filter.i7.x * signal.i7.x) - (filter.i7.y * signal.i7.y);
+    dest[index_rd + 7].y = (filter.i7.x * signal.i7.y) + (filter.i7.y * signal.i7.x); 
   }
 }
 
