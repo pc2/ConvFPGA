@@ -56,6 +56,7 @@ kernel void fetch(__global __attribute__((buffer_location(SVM_HOST_BUFFER_LOCATI
       row);
 
     if (step >= delay) {
+      //printf("fetch: step: %d, delay: %d\n", step, delay);
       write_channel_intel(chaninfft3da[0], data.i0);
       write_channel_intel(chaninfft3da[1], data.i1);
       write_channel_intel(chaninfft3da[2], data.i2);
@@ -289,6 +290,7 @@ kernel void transpose3D(
         step);
 
       if (step >= (DEPTH)) {
+        //printf("3D Transpose: step: %d, DEPTH: %d\n", step, DEPTH);
         unsigned index = (step - DEPTH) * 8;
 
         dest[index + 0] = data_out.i0;
@@ -354,7 +356,6 @@ kernel void transpose3D(
         data_wr_out, start_row);
 
       if (step_rd >= (DEPTH + initial_delay)) {
-
         write_channel_intel(chaninfft3dc[0], data_wr_out.i0);
         write_channel_intel(chaninfft3dc[1], data_wr_out.i1);
         write_channel_intel(chaninfft3dc[2], data_wr_out.i2);
@@ -363,6 +364,7 @@ kernel void transpose3D(
         write_channel_intel(chaninfft3dc[5], data_wr_out.i5);
         write_channel_intel(chaninfft3dc[6], data_wr_out.i6);
         write_channel_intel(chaninfft3dc[7], data_wr_out.i7);
+        //printf("3D Transpose: step: %d, DEPTH: %d, initial_delay: %d\n", step, DEPTH, initial_delay);
       }
 
     } // condition for reading from global memory
@@ -506,6 +508,7 @@ kernel void store(__global __attribute__((buffer_location(SVM_HOST_BUFFER_LOCATI
         write_channel_intel(chaninConv[5], data_out.i5);
         write_channel_intel(chaninConv[6], data_out.i6);
         write_channel_intel(chaninConv[7], data_out.i7);
+        //printf("store channel_out: %d DEPTH: %d\n", step, DEPTH);
       }
 
     }
@@ -519,7 +522,7 @@ kernel void conv3D(
   float2x8 filter, signal;
   const int DELAY = (1 << (LOGN - LOGPOINTS)); // N / 8
 
-  for(unsigned i = 0; i < DEPTH; i++){
+  for(unsigned i = 0; i < (N * DEPTH); i++){
 
     unsigned step_rd = i;
     // increment z by 1 every N/8 steps until (N*N/ 8)
@@ -535,6 +538,7 @@ kernel void conv3D(
     unsigned batch_index = (step_rd >> (LOGN + LOGN + LOGN - LOGPOINTS));
 
     unsigned index_rd = (batch_index * N * N * N) + (zdim * N * N) + (ydim * N) + xdim; 
+    //unsigned index_rd = i;
 
     filter.i0 = src[index_rd + 0];
     filter.i1 = src[index_rd + 1];
@@ -572,6 +576,7 @@ kernel void conv3D(
     dest[index_rd + 6].y = (filter.i6.x * signal.i6.y) + (filter.i6.y * signal.i6.x); 
     dest[index_rd + 7].x = (filter.i7.x * signal.i7.x) - (filter.i7.y * signal.i7.y);
     dest[index_rd + 7].y = (filter.i7.x * signal.i7.y) + (filter.i7.y * signal.i7.x); 
+    //printf("conv3D: %d DEPTH: %d\n", i, DEPTH);
   }
 }
 

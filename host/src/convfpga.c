@@ -29,8 +29,6 @@
 fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
-  int num_pts = N * N * N;
-  
   // if N is not a power of 2
   if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){
     return conv3D_time;
@@ -61,6 +59,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   queue_setup();
 
   // Device memory buffers
+  unsigned num_pts = N * N * N;
   cl_mem d_Buf1 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_CHANNEL_1_INTELFPGA, sizeof(float2) * num_pts, NULL, &status);
   checkError(status, "Failed to allocate input device buffer\n");
 
@@ -68,6 +67,9 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to allocate output device buffer\n");
 
   cl_mem d_Buf3 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_CHANNEL_3_INTELFPGA, sizeof(float2) * num_pts, NULL, &status);
+  checkError(status, "Failed to allocate output device buffer\n");
+
+  cl_mem d_Buf4 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_CHANNEL_4_INTELFPGA, sizeof(float2) * num_pts, NULL, &status);
   checkError(status, "Failed to allocate output device buffer\n");
 
   // Filter Transformation
@@ -79,12 +81,8 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clFinish(queue1);
   checkError(status, "failed to finish");
 
-  cl_ulong writeBuf_start = 0.0, writeBuf_end = 0.0;
-
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &writeBuf_start, NULL);
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &writeBuf_end, NULL);
-
   // Step 2: Transform filter
+  
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch1 kernel arg");
 
@@ -124,6 +122,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clEnqueueTask(queue5, transpose3D_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch second transpose kernel");
 
+  // Read from 2 to 3
   mode = RD_GLOBALMEM;
   status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf2);
   checkError(status, "Failed to set transpose3D kernel arg 0");
@@ -166,11 +165,15 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
 
   clGetEventProfilingInfo(startExec_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &kernel_start, NULL);
   clGetEventProfilingInfo(endExec_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &kernel_end, NULL);
-
+  
   // Step 3: Transform Signal
+  // Filter in Buf3
 
-  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, filter, 0, NULL, &writeBuf_event);
+  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, sig, 0, NULL, &writeBuf_event);
 
+  clFinish(queue1);
+
+  // Filter in buf 3, Signal in buf 1
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch1 kernel arg");
 
@@ -181,7 +184,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
 
   // - Writing to Buf2 from Buf1 before transpose
   mode = WR_GLOBALMEM;
-  status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
+  status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set transpose3D kernel arg 0");
   status=clSetKernelArg(transpose3D_kernel, 1, sizeof(cl_mem), (void *)&d_Buf2);
   checkError(status, "Failed to set transpose3D kernel arg 0");
@@ -192,18 +195,22 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to set fftc kernel arg");
 
   chan_out = CHAN_OUT;
-  status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
+  status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set store kernel arg 0");
+
   status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
 
+  // Filter Buf 3
   status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set conv3D kernel arg 0");
 
-  status=clSetKernelArg(conv3D_kernel, 1, sizeof(cl_mem), (void *)&d_Buf2);
+  // Output in Buf4
+  status=clSetKernelArg(conv3D_kernel, 1, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set conv3D kernel arg 0");
+  // Read from 1 + chan out -> write to 4
 
-  status = clEnqueueTask(queue8, conv3D_kernel, 0, NULL, &endExec_event);
+  status = clEnqueueTask(queue8, conv3D_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch conv3D kernel");
 
   status = clEnqueueTask(queue7, store_kernel, 0, NULL, NULL);
@@ -223,6 +230,9 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
   checkError(status, "Failed to set transpose3D kernel arg 2");
 
+  status = clEnqueueTask(queue5, transpose3D_kernel, 0, NULL, NULL);
+  checkError(status, "Failed to launch transpose3D write kernel");
+
   status = clEnqueueTask(queue4, fftb_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch second fft kernel");
 
@@ -232,7 +242,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clEnqueueTask(queue2, ffta_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fft kernel");
 
-  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, &startExec_event);
+  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fetch kernel");
 
   status = clFinish(queue1);
@@ -253,7 +263,9 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "failed to finish");
 
   // Step 4: Inverse FFT
-  status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf2);
+  // Output in buffer 4
+  
+  status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set fetch1 kernel arg");
 
   inverse_int = 1;
@@ -262,7 +274,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
   checkError(status, "Failed to set fftb kernel arg");
 
-  // - Writing to Buf2 from Buf1 before transpose
+  // - Writing to Buf4 to Buf1
   mode = WR_GLOBALMEM;
   status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set transpose3D kernel arg 0");
@@ -274,6 +286,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
   checkError(status, "Failed to set fftc kernel arg");
 
+  // - Output to Buf2
   chan_out = CHAN_NOT_OUT;
   status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf2);
   checkError(status, "Failed to set store kernel arg");
@@ -282,20 +295,19 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
 
   // Kernel Execution
 
-  status = clEnqueueTask(queue7, store_kernel, 0, NULL, &endExec_event);
+  status = clEnqueueTask(queue7, store_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch transpose kernel");
 
   status = clEnqueueTask(queue6, fftc_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fft kernel");
 
-  // Write: Bank 1 to 2
   status = clEnqueueTask(queue5, transpose3D_kernel, 0, NULL, NULL);
-  checkError(status, "Failed to launch second transpose kernel");
+  checkError(status, "Failed to launch transpose3D kernel");
 
   mode = RD_GLOBALMEM;
-  status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
+  status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set transpose3D kernel arg 0");
-  status=clSetKernelArg(transpose3D_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
+  status=clSetKernelArg(transpose3D_kernel, 1, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set transpose3D kernel arg 0");
   status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
   checkError(status, "Failed to set transpose3D kernel arg 2");
@@ -312,7 +324,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clEnqueueTask(queue2, ffta_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fft kernel");
 
-  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, &startExec_event);
+  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fetch kernel");
 
   status = clFinish(queue1);
@@ -329,11 +341,10 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "failed to finish");
   status = clFinish(queue7);
   checkError(status, "failed to finish");
-
-
+  
   // Copy results from device to host
-  cl_event readBuf_event;
-  status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, &readBuf_event);
+  //cl_event readBuf_event;
+  status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, NULL);
   
   status = clFinish(queue1);
   checkError(status, "failed to finish reading DDR using PCIe");
