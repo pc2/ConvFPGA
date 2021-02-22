@@ -24,7 +24,7 @@ void print_config(CONFIG config);
  * \param  iter         : number of iterations
  * \return true if successful, false otherwise
  */
-bool print_results(double exec_time, double gather_time, double flops, unsigned N, unsigned nprocs, unsigned nthreads, unsigned iter, unsigned how_many);
+void disp_results(CONFIG config, fpga_t fpga_t, double cpu_t, double api_t);
 
 /**
  * \brief  compute walltime in milliseconds

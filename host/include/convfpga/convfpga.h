@@ -28,7 +28,8 @@ typedef struct fpga_timing {
 
   double sig_pcie_rd_t;   /**< Time to read from DDR to host using PCIe bus  */ 
   double sig_pcie_wr_t;   /**< Time to write from DDR to host using PCIe bus */ 
-  double conv_exec_t;    /**< Kernel execution time from CPU wall clock time */
+  double sig_exec_t;    /**< Kernel execution time from CPU wall clock time */
+  double siginv_exec_t;  /**< Kernel execution time from CPU wall clock time */
 
   double svm_copyin_t;    /**< Time to copy in data to SVM */
   double svm_copyout_t;   /**< Time to copy data out of SVM */ 

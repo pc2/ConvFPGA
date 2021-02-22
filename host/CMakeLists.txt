@@ -11,7 +11,7 @@ add_library(convfpga STATIC
               ${PROJECT_SOURCE_DIR}/src/opencl_utils.c
               ${PROJECT_SOURCE_DIR}/src/misc.c)
 
-target_compile_features(convfpga PRIVATE cxx_std_17)
+#target_compile_features(convfpga PRIVATE cxx_std_17)
 target_compile_options(convfpga
     PRIVATE -Wall -Werror)
     

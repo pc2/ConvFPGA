@@ -27,15 +27,12 @@
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
 fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
-  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
   if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){
     return conv3D_time;
   }
-
-  // Can't pass bool to device, so convert it to int
-  int inverse_int = 0;
 
   // Setup kernels
   cl_kernel fetch_kernel = clCreateKernel(program, "fetch", &status);
@@ -46,7 +43,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to create transpose kernel");
   cl_kernel fftb_kernel = clCreateKernel(program, "fft3db", &status);
   checkError(status, "Failed to create fft3db kernel");
-  cl_kernel transpose3D_kernel = clCreateKernel(program, "transpose3D", &status);
+  cl_kernel transpose3D_kernel= clCreateKernel(program, "transpose3D", &status);
   checkError(status, "Failed to create transpose3D kernel");
   cl_kernel fftc_kernel = clCreateKernel(program, "fft3dc", &status);
   checkError(status, "Failed to create fft3dc kernel");
@@ -75,14 +72,18 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   // Filter Transformation
   // Step 1: write filter input to buffer
   cl_event writeBuf_event;
-
   status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, filter, 0, NULL, &writeBuf_event);
 
   status = clFinish(queue1);
   checkError(status, "failed to finish");
 
-  // Step 2: Transform filter
-  
+  cl_ulong filter_pcie_wr_start = 0, filter_pcie_wr_stop = 0;
+  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &filter_pcie_wr_start, NULL);
+  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &filter_pcie_wr_stop, NULL);
+  conv3D_time.filter_pcie_wr_t = (cl_double)(filter_pcie_wr_stop - filter_pcie_wr_start) * 1e-06; 
+
+  // Step 2: Transform filter: Buf1 -> Buf2 -> Buf3
+  int inverse_int = 0;
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch1 kernel arg");
 
@@ -166,14 +167,20 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   clGetEventProfilingInfo(startExec_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &kernel_start, NULL);
   clGetEventProfilingInfo(endExec_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &kernel_end, NULL);
   
-  // Step 3: Transform Signal
-  // Filter in Buf3
+  conv3D_time.filter_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
 
+  // Step 3: Transform Signal and stream to convolution kernel
+  //                             Buf3 (Filter)
+  //                              |
+  //  Buf1 -> Buf2 -> chanout -> .* -> Buf4 
   status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, sig, 0, NULL, &writeBuf_event);
-
   clFinish(queue1);
 
-  // Filter in buf 3, Signal in buf 1
+  cl_ulong sig_pcie_wr_start = 0, sig_pcie_wr_stop = 0;
+  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &sig_pcie_wr_start, NULL);
+  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &sig_pcie_wr_stop, NULL);
+  conv3D_time.sig_pcie_wr_t = (cl_double)(sig_pcie_wr_stop - sig_pcie_wr_stop) * 1e-06; 
+
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch1 kernel arg");
 
@@ -201,7 +208,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
 
-  // Filter Buf 3
+  // Filter Buf3
   status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set conv3D kernel arg 0");
 
@@ -210,7 +217,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to set conv3D kernel arg 0");
   // Read from 1 + chan out -> write to 4
 
-  status = clEnqueueTask(queue8, conv3D_kernel, 0, NULL, NULL);
+  status = clEnqueueTask(queue8, conv3D_kernel, 0, NULL, &endExec_event);
   checkError(status, "Failed to launch conv3D kernel");
 
   status = clEnqueueTask(queue7, store_kernel, 0, NULL, NULL);
@@ -242,7 +249,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clEnqueueTask(queue2, ffta_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fft kernel");
 
-  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, NULL);
+  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, &startExec_event);
   checkError(status, "Failed to launch fetch kernel");
 
   status = clFinish(queue1);
@@ -262,9 +269,14 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clFinish(queue8);
   checkError(status, "failed to finish");
 
-  // Step 4: Inverse FFT
-  // Output in buffer 4
+  clGetEventProfilingInfo(startExec_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &kernel_start, NULL);
+  clGetEventProfilingInfo(endExec_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &kernel_end, NULL);
   
+  conv3D_time.sig_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
+
+  // Step 4: Inverse FFT
+  // Buf4 -> Buf1 -> Buf2
+  // Output in buffer 2
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set fetch1 kernel arg");
 
@@ -294,8 +306,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to set store kernel arg 1");
 
   // Kernel Execution
-
-  status = clEnqueueTask(queue7, store_kernel, 0, NULL, NULL);
+  status = clEnqueueTask(queue7, store_kernel, 0, NULL, &endExec_event);
   checkError(status, "Failed to launch transpose kernel");
 
   status = clEnqueueTask(queue6, fftc_kernel, 0, NULL, NULL);
@@ -324,7 +335,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   status = clEnqueueTask(queue2, ffta_kernel, 0, NULL, NULL);
   checkError(status, "Failed to launch fft kernel");
 
-  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, NULL);
+  status = clEnqueueTask(queue1, fetch_kernel, 0, NULL, &startExec_event);
   checkError(status, "Failed to launch fetch kernel");
 
   status = clFinish(queue1);
@@ -341,13 +352,27 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "failed to finish");
   status = clFinish(queue7);
   checkError(status, "failed to finish");
+
+  clGetEventProfilingInfo(startExec_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &kernel_start, NULL);
+  clGetEventProfilingInfo(endExec_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &kernel_end, NULL);
   
+  conv3D_time.siginv_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
+
   // Copy results from device to host
   //cl_event readBuf_event;
-  status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, NULL);
-  
+  cl_event readBuf_event;
+  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec();
+  status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, &readBuf_event);
   status = clFinish(queue1);
   checkError(status, "failed to finish reading DDR using PCIe");
+
+  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec() - conv3D_time.sig_pcie_rd_t;
+
+  cl_ulong readBuf_start = 0, readBuf_end = 0;
+  clGetEventProfilingInfo(readBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &readBuf_start, NULL);
+  clGetEventProfilingInfo(readBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &readBuf_end, NULL);
+
+  conv3D_time.sig_pcie_rd_t = (cl_double)(readBuf_end - readBuf_start) * (cl_double)(1e-06);
 
   queue_cleanup();
 
@@ -357,6 +382,8 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
     clReleaseMemObject(d_Buf2);
   if (d_Buf3) 
     clReleaseMemObject(d_Buf3);
+  if (d_Buf4) 
+    clReleaseMemObject(d_Buf4);
 
   if(fetch_kernel) 
     clReleaseKernel(fetch_kernel);  
@@ -374,6 +401,8 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
 
   if(store_kernel) 
     clReleaseKernel(store_kernel);  
+  if (conv3D_kernel) 
+    clReleaseKernel(conv3D_kernel);
 
   conv3D_time.valid = 1;
   return conv3D_time;

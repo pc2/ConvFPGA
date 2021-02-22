@@ -233,9 +233,10 @@ kernel void fft3db(int inverse) {
 
 kernel void transpose3D(
   __global __attribute__((buffer_location(DDR_BUFFER_LOCATION))) float2 * restrict src, 
-  __global __attribute__((buffer_location(DDR_BUFFER_LOCATION))) float2 * restrict dest, 
-  const int mode) {
+  __global __attribute__((buffer_location(DDR_BUFFER_LOCATION))) float2 * restrict dest, const int mode){
 
+  //int N = (1 << LOGN);
+  //int DEPTH = (1 << (LOGN + LOGN - LOGPOINTS));
   const int initial_delay = (1 << (LOGN - LOGPOINTS)); // N / 8 for the bitrev buffers
   bool is_bufA = false, is_bitrevA = false;
   bool is_bufB = false, is_bitrevB = false;
@@ -247,8 +248,10 @@ kernel void transpose3D(
   float2 bitrev_in[2][N];
   float2 __attribute__((memory, numbanks(8))) bitrev_out[2][N];
 
+  const int EXIT_COND = ((N * DEPTH) + DEPTH);
+
   // additional iterations to fill the buffers
-  for(int step = -initial_delay; step < ((N * DEPTH) + DEPTH); step++){
+  for(int step = -initial_delay; step < EXIT_COND; step++){
 
     float2x8 data, data_out;
     float2x8 data_wr, data_wr_out;
@@ -555,31 +558,14 @@ kernel void conv3D(
     signal.i7 = read_channel_intel(chaninConv[7]);
 
     // Perform complex multiplication
-    signal.i0 = comp_mult(signal.i0, filter.i0);
-    signal.i1 = comp_mult(signal.i1, filter.i1);
-    signal.i2 = comp_mult(signal.i2, filter.i2);
-    signal.i3 = comp_mult(signal.i3, filter.i3);
-    signal.i4 = comp_mult(signal.i4, filter.i4);
-    signal.i5 = comp_mult(signal.i5, filter.i5);
-    signal.i6 = comp_mult(signal.i6, filter.i6);
-    signal.i7 = comp_mult(signal.i7, filter.i7);
-
-    dest[index_rd + 0].x = signal.i0.x;
-    dest[index_rd + 0].y = signal.i0.y;
-    dest[index_rd + 1].x = signal.i1.x;
-    dest[index_rd + 1].y = signal.i1.y;
-    dest[index_rd + 2].x = signal.i2.x;
-    dest[index_rd + 2].y = signal.i2.y;
-    dest[index_rd + 3].x = signal.i3.x;
-    dest[index_rd + 3].y = signal.i3.y;
-    dest[index_rd + 4].x = signal.i4.x;
-    dest[index_rd + 4].y = signal.i4.y;
-    dest[index_rd + 5].x = signal.i5.x;
-    dest[index_rd + 5].y = signal.i5.y;
-    dest[index_rd + 6].x = signal.i6.x;
-    dest[index_rd + 6].y = signal.i6.y;
-    dest[index_rd + 7].x = signal.i7.x;
-    dest[index_rd + 7].y = signal.i7.y;
+    dest[index_rd + 0] = comp_mult(signal.i0, filter.i0);
+    dest[index_rd + 1] = comp_mult(signal.i1, filter.i1);
+    dest[index_rd + 2] = comp_mult(signal.i2, filter.i2);
+    dest[index_rd + 3] = comp_mult(signal.i3, filter.i3);
+    dest[index_rd + 4] = comp_mult(signal.i4, filter.i4);
+    dest[index_rd + 5] = comp_mult(signal.i5, filter.i5);
+    dest[index_rd + 6] = comp_mult(signal.i6, filter.i6);
+    dest[index_rd + 7] = comp_mult(signal.i7, filter.i7);
   }
 }
 

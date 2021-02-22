@@ -18,6 +18,6 @@ struct CONFIG{
   bool noverify;
 };
 
-bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *out);
+bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *out, double cpu_exec_t);
 
 #endif 

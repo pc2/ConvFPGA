@@ -1,5 +1,3 @@
-# Author: Arjun Ramaswami
-# Arjun Ramaswami
 cmake_minimum_required(VERSION 3.10)
 
 project(convKernels VERSION 1.0
@@ -16,8 +14,7 @@ set_property(CACHE LOG_FFT_SIZE PROPERTY STRINGS 4 5 6 7 8 9)
 math(EXPR FFT_SIZE "1 << ${LOG_FFT_SIZE}")
 message("-- FFT size is ${FFT_SIZE}")
 math(EXPR DEPTH "1 << (${LOG_FFT_SIZE} + ${LOG_FFT_SIZE} - ${LOG_POINTS})")
-
-message("-- FFT Size: ${FFT_SIZE}")
+message("-- DEPTH: ${DEPTH}")
 
 set(DDR_BUFFER_LOCATION "DDR" CACHE STRING "Buffer location of 3d Transpose")
 set_property(CACHE DDR_BUFFER_LOCATION PROPERTY STRINGS "DDR" "device")

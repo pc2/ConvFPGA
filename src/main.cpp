@@ -51,24 +51,26 @@ int main(int argc, char* argv[]){
   }
 
   double temp_timer = 0.0, total_api_time = 0.0;
-  fpga_t timing;
+  double timing_cpu = 0.0, cpu_exec_t = 0.0;
+  fpga_t timing_fpga;
   for(size_t i = 0; i < conv_config.iter; i++){
     temp_timer = getTimeinMilliSec();
-    timing = fpgaf_conv3D(conv_config.num, sig, filter, out);
+    timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
     total_api_time += getTimeinMilliSec() - temp_timer;
 
     if(!conv_config.noverify){
   #ifdef USE_FFTW
-      status = fft_conv3D_cpu(conv_config, sig, filter, out);
+      status = fft_conv3D_cpu(conv_config, sig, filter, out, cpu_exec_t);
       if(status){
         free(sig);
         free(filter);
         free(out);
       }
+      timing_cpu += cpu_exec_t;
   #endif
     }
 
-    if(timing.valid == 0){
+    if(timing_fpga.valid == 0){
       cerr << "Invalid execution, timing found to be 0";
       free(sig);
       free(filter);
@@ -76,6 +78,9 @@ int main(int argc, char* argv[]){
       return EXIT_FAILURE;
     }
   }  // iter
+  double timing_api = total_api_time / conv_config.iter;
+  timing_cpu = timing_cpu / conv_config.iter;
+
   // destroy FFT input and output
   free(sig);
   free(filter);
@@ -85,6 +90,7 @@ int main(int argc, char* argv[]){
   fpga_final();
 
   // Verify convolution with library
-  //display_measures(total_api_time, avg_rd, avg_wr, avg_exec, avg_hw_rd, avg_hw_wr, avg_hw_exec, conv_config);
+  disp_results(conv_config, timing_fpga, timing_cpu, timing_api); 
+  
   return EXIT_SUCCESS;
 }

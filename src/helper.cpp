@@ -59,7 +59,7 @@ void parse_args(int argc, char* argv[], CONFIG &config){
   try{
     cxxopts::Options options("Convolution3D", "3D Conv Filter on incoming images");
     options.add_options()
-      ("f, file", "Path to bitstream", cxxopts::value<string>())
+      ("p, path", "Path to bitstream", cxxopts::value<string>())
       ("o, out", "Filename to output results", cxxopts::value<string>()->default_value("a.out"))
       ("n, num", "Size of FFT dim", cxxopts::value<unsigned>()->default_value("64"))
       ("i, iter", "Number of iterations", cxxopts::value<unsigned>()->default_value("1"))
@@ -75,11 +75,11 @@ void parse_args(int argc, char* argv[], CONFIG &config){
       exit(0);
     }
 
-    if(opt.count("file")){
-      config.path = opt["file"].as<string>();
+    if(opt.count("path")){
+      config.path = opt["path"].as<string>();
     }
     else{
-      cout << "\tPlease Input a file" << endl;
+      cout << "\tPlease input path to bitstream" << endl;
       exit(1);
     }
     if(opt.count("out")){
@@ -149,4 +149,35 @@ double getTimeinMilliseconds(){
      exit(EXIT_FAILURE);
    }
    return (double)(a.tv_nsec) * 1.0e-6 + (double)(a.tv_sec) * 1.0E3;
+}
+
+void disp_results(CONFIG config, fpga_t fpga_t, double cpu_t, double api_t){
+
+  cout << "\n\n------------------------------------------\n";
+  cout << "Measurements: \n";
+  cout << "--------------------------------------------\n";
+  cout << "Points                 : " << config.num << "^3\n";
+  cout << "Iterations             : " << config.iter << endl;
+
+  cout << "FPGA:" << endl;
+  cout << "-- Filter:" << endl;
+  cout << "\tPCIe Host to Device : "<< fpga_t.filter_pcie_wr_t << endl;
+  cout << "\tExecution           : "<< fpga_t.filter_exec_t << endl;
+  cout << "\tPCIe Device to Host : "<< fpga_t.filter_pcie_rd_t << endl;
+  cout << endl;
+
+  cout << "-- Signal Convolution:" << endl;
+  cout << "\tPCIe Host to Device : "<< fpga_t.sig_pcie_wr_t << endl;
+  cout << "\tFFT + Conv          : "<< fpga_t.sig_exec_t << endl;
+  cout << "\tInverse FFT         : "<< fpga_t.siginv_exec_t << endl;
+  cout << "\tTotal Computation   : "<< fpga_t.siginv_exec_t + fpga_t.siginv_exec_t << endl;
+  cout << "\tPCIe Device to Host : "<< fpga_t.sig_pcie_rd_t << endl;
+  cout << endl;
+
+  cout << "-- Total API Time: "<< endl;
+  cout << "\tRuntime             : "<< api_t << endl;
+  cout << endl;
+
+  cout << "CPU:" << endl;
+  cout << "\tRuntime             : "<< cpu_t << endl;
 }
