@@ -153,31 +153,33 @@ double getTimeinMilliseconds(){
 
 void disp_results(CONFIG config, fpga_t fpga_t, double cpu_t, double api_t){
 
-  cout << "\n\n------------------------------------------\n";
-  cout << "Measurements: \n";
-  cout << "--------------------------------------------\n";
+  cout << endl << endl;
+  cout << "MEASUREMENTS \n";
+  cout << "--------------\n";
   cout << "Points                 : " << config.num << "^3\n";
-  cout << "Iterations             : " << config.iter << endl;
+  cout << "Iterations             : " << config.iter << endl << endl;
 
   cout << "FPGA:" << endl;
-  cout << "-- Filter:" << endl;
-  cout << "\tPCIe Host to Device : "<< fpga_t.filter_pcie_wr_t << endl;
-  cout << "\tExecution           : "<< fpga_t.filter_exec_t << endl;
-  cout << "\tPCIe Device to Host : "<< fpga_t.filter_pcie_rd_t << endl;
+  cout << "-----" << endl;
+  cout << "- Filter:" << endl;
+  cout << "   PCIe Host to Device : "<< fpga_t.filter_pcie_wr_t << endl;
+  cout << "   Execution           : "<< fpga_t.filter_exec_t << endl;
+  cout << "   PCIe Device to Host : "<< fpga_t.filter_pcie_rd_t << endl;
   cout << endl;
 
-  cout << "-- Signal Convolution:" << endl;
-  cout << "\tPCIe Host to Device : "<< fpga_t.sig_pcie_wr_t << endl;
-  cout << "\tFFT + Conv          : "<< fpga_t.sig_exec_t << endl;
-  cout << "\tInverse FFT         : "<< fpga_t.siginv_exec_t << endl;
-  cout << "\tTotal Computation   : "<< fpga_t.siginv_exec_t + fpga_t.siginv_exec_t << endl;
-  cout << "\tPCIe Device to Host : "<< fpga_t.sig_pcie_rd_t << endl;
+  cout << "- Signal Convolution:" << endl;
+  cout << "   PCIe Host to Device : "<< fpga_t.sig_pcie_wr_t << endl;
+  cout << "   FFT + Conv          : "<< fpga_t.sig_exec_t << endl;
+  cout << "   Inverse FFT         : "<< fpga_t.siginv_exec_t << endl;
+  cout << "   Total Computation   : "<< fpga_t.siginv_exec_t + fpga_t.siginv_exec_t << endl;
+  cout << "   PCIe Device to Host : "<< fpga_t.sig_pcie_rd_t << endl;
   cout << endl;
 
-  cout << "-- Total API Time: "<< endl;
-  cout << "\tRuntime             : "<< api_t << endl;
+  cout << "- Total API Time: "<< endl;
+  cout << "   Runtime             : "<< api_t << endl;
   cout << endl;
 
   cout << "CPU:" << endl;
-  cout << "\tRuntime             : "<< cpu_t << endl;
+  cout << "----" << endl;
+  cout << "   Runtime             : "<< cpu_t << endl << endl;
 }

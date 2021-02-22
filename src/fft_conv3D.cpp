@@ -20,7 +20,7 @@ static void cleanup(){
   fftwf_destroy_plan(plan_inv_sig);
 }
 
-bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *fpgaout, double cpu_exec_t){
+bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *fpgaout, double &cpu_exec_t){
 
   unsigned num = config.num;
 
@@ -77,13 +77,12 @@ bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filt
     fftwf_sig[i][1] = temp.y;
   }
   
-
   fftwf_execute(plan_inv_sig);
   stop = getTimeinMilliSec();
 
   cpu_exec_t = stop - start;
 
-  double magnitude, noise, mag_sum, noise_sum;
+  double magnitude = 0.0, noise = 0.0, mag_sum = 0.0, noise_sum = 0.0;
   for (size_t i = 0; i < data_sz; i++) {
     magnitude = fftwf_sig[i][0] * fftwf_sig[i][0] + \
                       fftwf_sig[i][1] * fftwf_sig[i][1];

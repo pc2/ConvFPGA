@@ -61,7 +61,7 @@ int main(int argc, char* argv[]){
     if(!conv_config.noverify){
   #ifdef USE_FFTW
       status = fft_conv3D_cpu(conv_config, sig, filter, out, cpu_exec_t);
-      if(status){
+      if(!status){
         free(sig);
         free(filter);
         free(out);
