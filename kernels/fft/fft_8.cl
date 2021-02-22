@@ -179,8 +179,8 @@ float2x8 reorder_data(float2x8 data, const int depth, float2 * shift_reg, bool t
 // Implements a complex number multiplication
 float2 comp_mult(float2 a, float2 b) {
    float2 res;
-   res.x = a.x * b.x - a.y * b.y;
-   res.y = a.x * b.y + a.y * b.x;
+   res.x = (a.x * b.x) - (a.y * b.y);
+   res.y = (a.x * b.y) + (a.y * b.x);
    return res;
 }
 
