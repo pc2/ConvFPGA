@@ -18,7 +18,6 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 find_package(FFTW REQUIRED)
 message("-- FFTW found")
 
-find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
 
 # build host code

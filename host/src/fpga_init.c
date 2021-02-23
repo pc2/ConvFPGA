@@ -34,7 +34,7 @@ bool svm_enabled = false;
  * @param svm : 1 if svm
  * @return void ptr or NULL
  */
-void* fpgaf_complex_malloc(size_t sz){
+void* fpgaf_complex_malloc(const size_t sz){
 
   if(sz == 0){
     return NULL;

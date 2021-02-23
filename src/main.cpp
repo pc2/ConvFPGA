@@ -16,19 +16,27 @@ int main(int argc, char* argv[]){
   parse_args(argc, argv, conv_config);
   print_config(conv_config);
 
-  const char* platform = "Intel(R) FPGA SDK for OpenCL(TM)";
-  const bool use_svm = false;
+  if(conv_config.cpuonly){
+    #ifdef USE_FFTW
+    cpu_t cpu_timing = {0.0, 0.0, false};
+    cpu_timing = fft_conv3D_cpu(conv_config);
+    if(cpu_timing.valid == false){
+      cout << "Error in CPU Conv3D Implementation\n";
+      return EXIT_FAILURE;
+    }
   
-  int isInit = fpga_initialize(platform, conv_config.path.c_str(), use_svm);
-  if(isInit != 0){
-    fprintf(stderr, "FPGA initialization error\n");
+    disp_results(conv_config, cpu_timing); 
+    return EXIT_SUCCESS;
+    #else
+    cerr << "FFTW not found" << endl;
     return EXIT_FAILURE;
+    #endif
   }
 
   const unsigned num = conv_config.num;
+  const unsigned num_pts = num * num * num;
+  const size_t inp_sz = sizeof(float2) * num * num * num;
 
-  unsigned num_pts = num * num * num;
-  size_t inp_sz = sizeof(float2) * num * num * num;
   float2 *filter = (float2*)fpgaf_complex_malloc(inp_sz);
   float2 *sig = (float2*)fpgaf_complex_malloc(inp_sz);
   float2 *out = (float2*)fpgaf_complex_malloc(inp_sz);
@@ -50,9 +58,17 @@ int main(int argc, char* argv[]){
     return EXIT_FAILURE;
   }
 
-  double temp_timer = 0.0, total_api_time = 0.0;
-  double timing_cpu = 0.0, cpu_exec_t = 0.0;
+  const char* platform = "Intel(R) FPGA SDK for OpenCL(TM)";
+  const bool use_svm = false;
+  
+  int isInit = fpga_initialize(platform, conv_config.path.c_str(), use_svm);
+  if(isInit != 0){
+    cerr << "FPGA initialization error\n";
+    return EXIT_FAILURE;
+  }
+
   fpga_t timing_fpga;
+  double temp_timer = 0.0, total_api_time = 0.0;
   for(size_t i = 0; i < conv_config.iter; i++){
     temp_timer = getTimeinMilliSec();
     timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
@@ -60,17 +76,16 @@ int main(int argc, char* argv[]){
 
     if(!conv_config.noverify){
   #ifdef USE_FFTW
-      status = fft_conv3D_cpu(conv_config, sig, filter, out, cpu_exec_t);
+      status = fft_conv3D_cpu_verify(conv_config, sig, filter, out);
       if(!status){
         free(sig);
         free(filter);
         free(out);
       }
-      timing_cpu += cpu_exec_t;
   #endif
     }
 
-    if(timing_fpga.valid == 0){
+    if(timing_fpga.valid == false){
       cerr << "Invalid execution, timing found to be 0";
       free(sig);
       free(filter);
@@ -79,7 +94,6 @@ int main(int argc, char* argv[]){
     }
   }  // iter
   double timing_api = total_api_time / conv_config.iter;
-  timing_cpu = timing_cpu / conv_config.iter;
 
   // destroy FFT input and output
   free(sig);
@@ -90,7 +104,7 @@ int main(int argc, char* argv[]){
   fpga_final();
 
   // Verify convolution with library
-  disp_results(conv_config, timing_fpga, timing_cpu, timing_api); 
+  disp_results(conv_config, timing_fpga, timing_api); 
   
   return EXIT_SUCCESS;
 }

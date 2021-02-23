@@ -60,7 +60,7 @@ extern void fpga_final();
  * @param sz  : size_t : size to allocate
  * @return void ptr or NULL
  */
-extern void* fpgaf_complex_malloc(size_t sz);
+extern void* fpgaf_complex_malloc(const size_t sz);
 
 /**
  * @brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA

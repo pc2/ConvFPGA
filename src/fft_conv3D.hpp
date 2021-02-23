@@ -16,8 +16,17 @@ struct CONFIG{
   unsigned iter;
   unsigned threads;
   bool noverify;
+  bool cpuonly;
 };
 
-bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *out, double &cpu_exec_t);
+typedef struct cpu_timing {
+  double filter_t;    /**< Time for filter  */ 
+  double conv_t;      /**< Time for Convolution */ 
+  bool valid;         /**< True if valid execution */
+} cpu_t;
+
+cpu_t fft_conv3D_cpu(struct CONFIG& config);
+
+bool fft_conv3D_cpu_verify(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *out);
 
 #endif 

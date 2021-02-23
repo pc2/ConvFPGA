@@ -1,6 +1,5 @@
 #include <iostream>
 #include <omp.h>
-#include <mpi.h>
 #include <fftw3.h>
 #include <math.h>
 
@@ -9,18 +8,134 @@ extern "C"{
   #include "convfpga/convfpga.h"
 }
 #include "helper.hpp"
+#include "config.h"
 
 using namespace std;
 
 static fftwf_plan plan_filter, plan_sig, plan_inv_sig;
 
-static void cleanup(){
+static void cleanup_plans(){
   fftwf_destroy_plan(plan_sig);
   fftwf_destroy_plan(plan_filter);
   fftwf_destroy_plan(plan_inv_sig);
 }
 
-bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *fpgaout, double &cpu_exec_t){
+static bool fpgaf_create_data(fftwf_complex *inp, const unsigned num_pts){
+
+  if(inp == NULL || num_pts <= 0){
+    return false;
+  }
+
+  for(size_t i = 0; i < num_pts; i++){
+    inp[i][0] = (float)((float)rand() / (float)RAND_MAX);
+    inp[i][1] = (float)((float)rand() / (float)RAND_MAX);
+  }
+
+  return true;
+}
+
+// Convolution implementation
+cpu_t fft_conv3D_cpu(struct CONFIG& config){
+
+  unsigned num = config.num;
+
+  size_t num_pts = num * num * num;
+  fftwf_complex *fftwf_sig = fftwf_alloc_complex(num_pts);
+  fftwf_complex *fftwf_filter = fftwf_alloc_complex(num_pts);
+
+  const int dim = 3;
+  const int n[3] = {(int)num, (int)num, (int)num};
+  int idist = num * num * num, odist = num * num * num;
+  int istride = 1, ostride = 1;
+  //const int *inembed = n, *onembed = n;
+
+  const unsigned fftw_plan = FFTW_PLAN;
+
+  switch(fftw_plan){
+    case FFTW_MEASURE:  cout << "FFTW Plan: Measure\n";
+                        break;
+    case FFTW_ESTIMATE: cout << "FFTW Plan: Estimate\n";
+                        break;
+    case FFTW_PATIENT:  cout << "FFTW Plan: Patient\n";
+                        break;
+    case FFTW_EXHAUSTIVE: cout << "FFTW Plan: Exhaustive\n";
+                        break;
+    default: throw "Incorrect plan\n";
+            break;
+  }
+
+  int threads_ok = fftwf_init_threads(); 
+  if(threads_ok == 0){
+    throw "Something went wrong with Multithreaded FFTW! Exiting... \n";
+  }
+  fftwf_plan_with_nthreads((int)config.threads);
+
+  plan_filter = fftwf_plan_many_dft(dim, n, 1, fftwf_filter, NULL, istride, idist, fftwf_filter, NULL, ostride, odist, FFTW_FORWARD, fftw_plan);
+
+  plan_sig = fftwf_plan_many_dft(dim, n, 1, fftwf_sig, NULL, istride, idist, fftwf_sig, NULL, ostride, odist, FFTW_FORWARD, fftw_plan);
+
+  plan_inv_sig = fftwf_plan_many_dft(dim, n, 1, fftwf_sig, NULL, istride, idist, fftwf_sig, NULL, ostride, odist, FFTW_BACKWARD, fftw_plan);
+
+  double conv_start = 0.0, conv_stop = 0.0;
+  double filter_start = 0.0, filter_stop = 0.0;
+  cpu_t timing_cpu = {0.0, 0.0, 0};
+
+  for(unsigned i = 0; i < config.iter; i++){
+    bool status = fpgaf_create_data(fftwf_filter, num_pts);
+    if(!status){
+      cerr << "Error in Data Creation" << endl;
+      fftwf_free(fftwf_sig);
+      fftwf_free(fftwf_filter);
+      timing_cpu.valid = false;
+      return timing_cpu;
+    }
+    status = fpgaf_create_data(fftwf_sig, num_pts);
+    if(!status){
+      cerr << "Error in Data Creation" << endl;
+      fftwf_free(fftwf_sig);
+      fftwf_free(fftwf_filter);
+      timing_cpu.valid = false;
+      return timing_cpu;
+    }
+
+    // Filter transformation
+    filter_start = getTimeinMilliSec();
+    fftwf_execute(plan_filter);
+    filter_stop = getTimeinMilliSec();
+    timing_cpu.filter_t += (filter_stop - filter_start);
+
+    // Signal Transformation
+    conv_start = getTimeinMilliSec();
+    fftwf_execute(plan_sig);
+
+    // Multiplication
+    float2 temp;
+    for(unsigned i = 0; i < num_pts; i++){
+      temp.x = (fftwf_sig[i][0] * fftwf_filter[i][0]) - (fftwf_sig[i][1] * fftwf_filter[i][1]);
+      temp.y = (fftwf_sig[i][0] * fftwf_filter[i][1]) + (fftwf_sig[i][1] * fftwf_filter[i][0]);
+
+      fftwf_sig[i][0] = temp.x;
+      fftwf_sig[i][1] = temp.y;
+    }
+    
+    // Inverse Transformation
+    fftwf_execute(plan_inv_sig);
+    conv_stop = getTimeinMilliSec();
+
+    timing_cpu.conv_t += (conv_stop - conv_start);
+    fftwf_free(fftwf_sig);
+    fftwf_free(fftwf_filter);
+  }
+
+  cleanup_plans();
+  fftwf_cleanup_threads();
+
+  timing_cpu.valid = true;
+  return timing_cpu;
+}
+
+// Verification Function for FPGA 3D Convolution
+bool fft_conv3D_cpu_verify(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *fpgaout){
 
   unsigned num = config.num;
 
@@ -63,9 +178,8 @@ bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filt
 
   plan_inv_sig = fftwf_plan_many_dft(dim, n, 1, fftwf_sig, NULL, istride, idist, fftwf_sig, NULL, ostride, odist, FFTW_BACKWARD, fftw_plan);
 
-  double start = 0.0, stop = 0.0;
-  start = getTimeinMilliSec();
   fftwf_execute(plan_filter);
+
   fftwf_execute(plan_sig);
 
   float2 temp;
@@ -78,37 +192,36 @@ bool fft_conv3D_cpu(struct CONFIG& config, const float2 *sig, const float2 *filt
   }
   
   fftwf_execute(plan_inv_sig);
-  stop = getTimeinMilliSec();
 
-  cpu_exec_t = stop - start;
+  if(!config.cpuonly){
+    double magnitude = 0.0, noise = 0.0, mag_sum = 0.0, noise_sum = 0.0;
+    for (size_t i = 0; i < data_sz; i++) {
+      magnitude = fftwf_sig[i][0] * fftwf_sig[i][0] + \
+                        fftwf_sig[i][1] * fftwf_sig[i][1];
+      noise = (fftwf_sig[i][0] - fpgaout[i].x) \
+          * (fftwf_sig[i][0] - fpgaout[i].x) + 
+          (fftwf_sig[i][1] - fpgaout[i].y) * (fftwf_sig[i][1] - fpgaout[i].y);
 
-  double magnitude = 0.0, noise = 0.0, mag_sum = 0.0, noise_sum = 0.0;
-  for (size_t i = 0; i < data_sz; i++) {
-    magnitude = fftwf_sig[i][0] * fftwf_sig[i][0] + \
-                      fftwf_sig[i][1] * fftwf_sig[i][1];
-    noise = (fftwf_sig[i][0] - fpgaout[i].x) \
-        * (fftwf_sig[i][0] - fpgaout[i].x) + 
-        (fftwf_sig[i][1] - fpgaout[i].y) * (fftwf_sig[i][1] - fpgaout[i].y);
-
-    mag_sum += magnitude;
-    noise_sum += noise;
-#ifndef NDEBUG
-    //printf("%zu : fpga - (%e %e) cpu - (%e %e)\n", i, fpgaout[i].x, fpgaout[i].y, fftwf_sig[i][0], fftwf_sig[i][1]);
-#endif      
-  }
+      mag_sum += magnitude;
+      noise_sum += noise;
+      #ifndef NDEBUG
+      //printf("%zu : fpga - (%e %e) cpu - (%e %e)\n", i, fpgaout[i].x, fpgaout[i].y, fftwf_sig[i][0], fftwf_sig[i][1]);
+      #endif      
+    }
+    float db = 10 * log(mag_sum / noise_sum) / log(10.0);
+    if(db > 120){
+      return true;
+    }
+    else{
+      cout << "Signal to noise ratio on output sample: ";
+      cout << db << " --> FAILED\n\n";
+      return false;
+    }
+  } // end of if condition
 
   fftwf_free(fftwf_sig);
   fftwf_free(fftwf_filter);
-  cleanup();
+  cleanup_plans();
 
-  float db = 10 * log(mag_sum / noise_sum) / log(10.0);
-  if(db > 120){
-    return true;
-  }
-  else{
-    cout << "Signal to noise ratio on output sample: ";
-    cout << db << " --> FAILED\n\n";
-    cpu_exec_t = 0.0;
-    return false;
-  }
+  return true;
 }

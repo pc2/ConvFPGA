@@ -6,11 +6,6 @@
 
 using namespace std;
 
-/* Compute (K*L)%M */
-double moda(unsigned K, unsigned L, unsigned M){
-    return (double)(((long long)K * L) % M);
-}
-
 /**
  * \brief  compute walltime in milliseconds
  * \retval time in milliseconds
@@ -65,22 +60,26 @@ void parse_args(int argc, char* argv[], CONFIG &config){
       ("i, iter", "Number of iterations", cxxopts::value<unsigned>()->default_value("1"))
       ("t, threads", "Number of threads", cxxopts::value<unsigned>()->default_value("1"))
       ("y, noverify", "No verification", cxxopts::value<bool>()->default_value("false") )
+      ("c, cpu-only", "CPU FFTW Only", cxxopts::value<bool>()->default_value("false") )
       ("h,help", "Print usage")
     ;
     auto opt = options.parse(argc, argv);
 
+    config.cpuonly = opt["cpu-only"].as<bool>();
     // print help
     if (opt.count("help")){
       cout << options.help() << endl;
       exit(0);
     }
 
-    if(opt.count("path")){
-      config.path = opt["path"].as<string>();
-    }
-    else{
-      cout << "\tPlease input path to bitstream" << endl;
-      exit(1);
+    if(!config.cpuonly){
+      if(opt.count("path")){
+        config.path = opt["path"].as<string>();
+      }
+      else{
+        cout << "\tPlease input path to bitstream" << endl;
+        exit(1);
+      }
     }
     if(opt.count("out")){
       config.out_fname = opt["out"].as<string>();
@@ -99,8 +98,9 @@ void parse_args(int argc, char* argv[], CONFIG &config){
 }
 
 void print_config(CONFIG config){
+  cout << endl;
   cout << "CONFIGURATION: \n";
-  cout << "--------------------------------------------\n";
+  cout << "---------------\n";
   cout << "Bitstream    = " << config.path << endl;
   cout << "Points       = {"<< config.num << ", " << config.num << ", " << config.num << "}" << endl;
   #ifdef MEASURE
@@ -114,8 +114,7 @@ void print_config(CONFIG config){
   #endif
   cout << "Threads      = "<< config.threads << endl;
   cout << "Iterations   = "<< config.iter << endl;
-  //cout << "Results      = "<< config.noverify ? "not verified\n" : "verified\n";
-  cout << "--------------------------------------------\n\n";
+  cout << "----------------\n\n";
 }
 
 /**
@@ -151,7 +150,7 @@ double getTimeinMilliseconds(){
    return (double)(a.tv_nsec) * 1.0e-6 + (double)(a.tv_sec) * 1.0E3;
 }
 
-void disp_results(CONFIG config, fpga_t fpga_t, double cpu_t, double api_t){
+void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
 
   cout << endl << endl;
   cout << "MEASUREMENTS \n";
@@ -162,24 +161,34 @@ void disp_results(CONFIG config, fpga_t fpga_t, double cpu_t, double api_t){
   cout << "FPGA:" << endl;
   cout << "-----" << endl;
   cout << "- Filter:" << endl;
-  cout << "   PCIe Host to Device : "<< fpga_t.filter_pcie_wr_t << endl;
-  cout << "   Execution           : "<< fpga_t.filter_exec_t << endl;
-  cout << "   PCIe Device to Host : "<< fpga_t.filter_pcie_rd_t << endl;
+  cout << "   PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
+  cout << "   Execution           : "<< fpga_timing.filter_exec_t << endl;
+  cout << "   PCIe Device to Host : "<< fpga_timing.filter_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Signal Convolution:" << endl;
-  cout << "   PCIe Host to Device : "<< fpga_t.sig_pcie_wr_t << endl;
-  cout << "   FFT + Conv          : "<< fpga_t.sig_exec_t << endl;
-  cout << "   Inverse FFT         : "<< fpga_t.siginv_exec_t << endl;
-  cout << "   Total Computation   : "<< fpga_t.siginv_exec_t + fpga_t.siginv_exec_t << endl;
-  cout << "   PCIe Device to Host : "<< fpga_t.sig_pcie_rd_t << endl;
+  cout << "   PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
+  cout << "   FFT + Conv          : "<< fpga_timing.sig_exec_t << endl;
+  cout << "   Inverse FFT         : "<< fpga_timing.siginv_exec_t << endl;
+  cout << "   Total Computation   : "<< fpga_timing.siginv_exec_t + fpga_timing.siginv_exec_t << endl;
+  cout << "   PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Total API Time: "<< endl;
   cout << "   Runtime             : "<< api_t << endl;
   cout << endl;
+}
+
+void disp_results(CONFIG config, cpu_t timing_cpu){
+
+  cout << endl << endl;
+  cout << "MEASUREMENTS \n";
+  cout << "--------------\n";
+  cout << "Points          : " << config.num << "^3\n";
+  cout << "Iterations      : " << config.iter << endl << endl;
 
   cout << "CPU:" << endl;
   cout << "----" << endl;
-  cout << "   Runtime             : "<< cpu_t << endl << endl;
+  cout << "Filter Runtime   : "<< timing_cpu.filter_t << endl;
+  cout << "Conv3D Runtime   : "<< timing_cpu.conv_t << endl << endl;
 }
