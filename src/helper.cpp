@@ -61,17 +61,18 @@ void parse_args(int argc, char* argv[], CONFIG &config){
       ("t, threads", "Number of threads", cxxopts::value<unsigned>()->default_value("1"))
       ("y, noverify", "No verification", cxxopts::value<bool>()->default_value("false") )
       ("c, cpu-only", "CPU FFTW Only", cxxopts::value<bool>()->default_value("false") )
+      ("s, usesvm", "SVM enabled", cxxopts::value<bool>()->default_value("false") )
       ("h,help", "Print usage")
     ;
     auto opt = options.parse(argc, argv);
 
-    config.cpuonly = opt["cpu-only"].as<bool>();
     // print help
     if (opt.count("help")){
       cout << options.help() << endl;
       exit(0);
     }
 
+    config.cpuonly = opt["cpu-only"].as<bool>();
     if(!config.cpuonly){
       if(opt.count("path")){
         config.path = opt["path"].as<string>();
@@ -90,6 +91,7 @@ void parse_args(int argc, char* argv[], CONFIG &config){
     config.threads = opt["threads"].as<unsigned>();
     config.iter = opt["iter"].as<unsigned>();
     config.noverify = opt["noverify"].as<bool>();
+    config.usesvm = opt["usesvm"].as<bool>();
   }
   catch(const cxxopts::OptionException& e){
     cerr << "Error parsing options: " << e.what() << endl;
@@ -157,25 +159,26 @@ void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
   cout << "--------------\n";
   cout << "Points                 : " << config.num << "^3\n";
   cout << "Iterations             : " << config.iter << endl << endl;
+  cout << (config.usesvm ? "Using SVM\n":"");
 
   cout << "FPGA:" << endl;
   cout << "-----" << endl;
   cout << "- Filter:" << endl;
-  cout << "   PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
-  cout << "   Execution           : "<< fpga_timing.filter_exec_t << endl;
-  cout << "   PCIe Device to Host : "<< fpga_timing.filter_pcie_rd_t << endl;
+  cout << "  PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
+  cout << "  Execution           : "<< fpga_timing.filter_exec_t << endl;
+  cout << "  PCIe Device to Host : "<< fpga_timing.filter_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Signal Convolution:" << endl;
-  cout << "   PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
-  cout << "   FFT + Conv          : "<< fpga_timing.sig_exec_t << endl;
-  cout << "   Inverse FFT         : "<< fpga_timing.siginv_exec_t << endl;
-  cout << "   Total Computation   : "<< fpga_timing.siginv_exec_t + fpga_timing.siginv_exec_t << endl;
-  cout << "   PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
+  cout << "  PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
+  cout << "  FFT + Conv          : "<< fpga_timing.sig_exec_t << endl;
+  cout << "  Inverse FFT         : "<< fpga_timing.siginv_exec_t << endl;
+  cout << "  Total Computation   : "<< fpga_timing.siginv_exec_t + fpga_timing.siginv_exec_t << endl;
+  cout << "  PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Total API Time: "<< endl;
-  cout << "   Runtime             : "<< api_t << endl;
+  cout << "  Runtime             : "<< api_t << endl;
   cout << endl;
 }
 

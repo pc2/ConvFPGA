@@ -59,9 +59,8 @@ int main(int argc, char* argv[]){
   }
 
   const char* platform = "Intel(R) FPGA SDK for OpenCL(TM)";
-  const bool use_svm = false;
   
-  int isInit = fpga_initialize(platform, conv_config.path.c_str(), use_svm);
+  int isInit = fpga_initialize(platform, conv_config.path.c_str(), conv_config.usesvm);
   if(isInit != 0){
     cerr << "FPGA initialization error\n";
     return EXIT_FAILURE;
@@ -70,10 +69,17 @@ int main(int argc, char* argv[]){
   fpga_t timing_fpga;
   double temp_timer = 0.0, total_api_time = 0.0;
   for(size_t i = 0; i < conv_config.iter; i++){
-    temp_timer = getTimeinMilliSec();
-    timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
-    total_api_time += getTimeinMilliSec() - temp_timer;
 
+    if(conv_config.usesvm){
+      temp_timer = getTimeinMilliSec();
+      timing_fpga = fpgaf_conv3D_svm(conv_config.num, sig, filter, out);
+      total_api_time += getTimeinMilliSec() - temp_timer;
+    }
+    else{
+      temp_timer = getTimeinMilliSec();
+      timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
+      total_api_time += getTimeinMilliSec() - temp_timer;
+    }
     if(!conv_config.noverify){
   #ifdef USE_FFTW
       status = fft_conv3D_cpu_verify(conv_config, sig, filter, out);

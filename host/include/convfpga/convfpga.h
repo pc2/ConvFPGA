@@ -31,8 +31,8 @@ typedef struct fpga_timing {
   double sig_exec_t;    /**< Kernel execution time from CPU wall clock time */
   double siginv_exec_t;  /**< Kernel execution time from CPU wall clock time */
 
-  double svm_copyin_t;    /**< Time to copy in data to SVM */
-  double svm_copyout_t;   /**< Time to copy data out of SVM */ 
+  //double svm_copyin_t;    /**< Time to copy in data to SVM */
+  //double svm_copyout_t;   /**< Time to copy data out of SVM */ 
   bool valid;             /**< Represents true signifying valid execution */
 } fpga_t;
 

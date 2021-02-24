@@ -1,4 +1,4 @@
-// Author: Arjun Ramaswami
+// Arjun Ramaswami
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +11,7 @@
 
 #include "fpga_state.h"
 #include "convfpga/convfpga.h"
+#include "svm.h"
 #include "opencl_utils.h"
 #include "misc.h"
 
@@ -21,11 +22,12 @@
 #define CHAN_NOT_OUT 0
 #define CHAN_OUT 1
 
+
 /**
  * \brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA for 3D Transpose
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
-fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
+fpga_t fpgaf_conv3D_svm(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
@@ -68,23 +70,43 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   cl_mem d_Buf4 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_CHANNEL_4_INTELFPGA, sizeof(float2) * num_pts, NULL, &status);
   checkError(status, "Failed to allocate output device buffer\n");
 
-  // Filter Transformation
-  // Step 1: write filter input to buffer
-  cl_event writeBuf_event;
-  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, filter, 0, NULL, &writeBuf_event);
+  num_pts = N * N * N;
+  size_t num_bytes = num_pts * sizeof(float2);
+  // allocate SVM buffers
+  float2 *h_inData, *h_outData;
+  h_inData = (float2 *)clSVMAlloc(context, CL_MEM_READ_ONLY, sizeof(float2) * num_pts, 0);
+  h_outData = (float2 *)clSVMAlloc(context, CL_MEM_WRITE_ONLY, sizeof(float2) * num_pts, 0);
 
-  status = clFinish(queue1);
-  checkError(status, "failed to finish");
+  num_bytes = num_pts * sizeof(float2);
 
-  cl_ulong filter_pcie_wr_start = 0, filter_pcie_wr_stop = 0;
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &filter_pcie_wr_start, NULL);
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &filter_pcie_wr_stop, NULL);
-  conv3D_time.filter_pcie_wr_t = (cl_double)(filter_pcie_wr_stop - filter_pcie_wr_start) * 1e-06; 
+  // Copy Filter Data to SVM Buffer
+  status = clEnqueueSVMMap(queue1, CL_TRUE, CL_MAP_WRITE, (void *)h_inData, sizeof(float2) * num_pts, 0, NULL, NULL);
+  checkError(status, "Failed to map input data");
+
+  // copy data into h_inData
+  memcpy(h_inData, filter, num_bytes);
+
+  status = clEnqueueSVMUnmap(queue1, (void *)h_inData, 0, NULL, NULL);
+  checkError(status, "Failed to unmap input data");
+
+  status = clEnqueueSVMMap(queue1, CL_TRUE, CL_MAP_WRITE, (void *)h_outData, sizeof(float2) * num_pts, 0, NULL, NULL);
+  checkError(status, "Failed to map input data");
+
+  // copy data into h_inData
+  memset(&h_outData[0], 0, num_bytes);
+
+  status = clEnqueueSVMUnmap(queue1, (void *)h_outData, 0, NULL, NULL);
+  checkError(status, "Failed to unmap input data");
 
   // Step 2: Transform filter: Buf1 -> Buf2 -> Buf3
   int inverse_int = 0;
-  status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
-  checkError(status, "Failed to set fetch1 kernel arg");
+  int use_svm = 1;
+  status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData);
+  checkError(status, "Failed to set fetch kernel arg");
+  status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
+  checkError(status, "Failed to set fetch kernel arg 1");
+  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+  checkError(status, "Failed to set transpose3D kernel arg 2");
 
   status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
   checkError(status, "Failed to set ffta kernel arg");
@@ -104,10 +126,15 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to set fftc kernel arg");
 
   int chan_out = CHAN_NOT_OUT;
-  status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
-  checkError(status, "Failed to set store kernel arg");
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
+  use_svm = 0;
+  status = clSetKernelArgSVMPointer(store_kernel, 0, (void *)h_outData);
+  checkError(status, "Failed to set store kernel arg 0");
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&d_Buf3);
   checkError(status, "Failed to set store kernel arg 1");
+  status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
+  checkError(status, "Failed to set store kernel arg 2");
+  status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+  checkError(status, "Failed to set store kernel arg 3");
 
   // Kernel Execution
   cl_event startExec_event, endExec_event;
@@ -172,23 +199,31 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   //                             Buf3 (Filter)
   //                              |
   //  Buf1 -> Buf2 -> chanout -> .* -> Buf4 
-  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, sig, 0, NULL, &writeBuf_event);
-  clFinish(queue1);
 
-  cl_ulong sig_pcie_wr_start = 0, sig_pcie_wr_stop = 0;
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &sig_pcie_wr_start, NULL);
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &sig_pcie_wr_stop, NULL);
-  conv3D_time.sig_pcie_wr_t = (cl_double)(sig_pcie_wr_stop - sig_pcie_wr_stop) * 1e-06; 
+  // Copy Signal to SVM Buffer
+  status = clEnqueueSVMMap(queue1, CL_TRUE, CL_MAP_WRITE, (void *)h_inData, sizeof(float2) * num_pts, 0, NULL, NULL);
+  checkError(status, "Failed to map input data");
 
-  status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
-  checkError(status, "Failed to set fetch1 kernel arg");
+  // copy data into h_inData
+  memcpy(h_inData, sig, num_bytes);
+
+  status = clEnqueueSVMUnmap(queue1, (void *)h_inData, 0, NULL, NULL);
+  checkError(status, "Failed to unmap input data");
+
+  use_svm = 1;
+  status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData);
+  checkError(status, "Failed to set fetch kernel arg");
+  status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
+  checkError(status, "Failed to set fetch kernel arg 1");
+  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+  checkError(status, "Failed to set transpose3D kernel arg 2");
 
   status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
   checkError(status, "Failed to set ffta kernel arg");
   status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
   checkError(status, "Failed to set fftb kernel arg");
 
-  // - Writing to Buf2 from Buf1 before transpose
+  // - Writing to Buf2 from SVM Host before transpose
   mode = WR_GLOBALMEM;
   status=clSetKernelArg(transpose3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set transpose3D kernel arg 0");
@@ -201,11 +236,15 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   checkError(status, "Failed to set fftc kernel arg");
 
   chan_out = CHAN_OUT;
-  status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
+  use_svm = 0;
+  status = clSetKernelArgSVMPointer(store_kernel, 0, (void *)h_outData);
   checkError(status, "Failed to set store kernel arg 0");
-
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&d_Buf4);
   checkError(status, "Failed to set store kernel arg 1");
+  status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
+  checkError(status, "Failed to set store kernel arg 2");
+  status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+  checkError(status, "Failed to set store kernel arg 3");
 
   // Filter Buf3
   status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf3);
@@ -274,10 +313,15 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   conv3D_time.sig_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
 
   // Step 4: Inverse FFT
-  // Buf4 -> Buf1 -> Buf2
+  // Buf4 -> Buf1 -> Host
   // Output in buffer 2
-  status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf4);
-  checkError(status, "Failed to set fetch1 kernel arg");
+  use_svm = 0;
+  status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData);
+  checkError(status, "Failed to set fetch kernel arg");
+  status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf4);
+  checkError(status, "Failed to set fetch kernel arg 1");
+  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+  checkError(status, "Failed to set transpose3D kernel arg 2");
 
   inverse_int = 1;
   status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
@@ -299,10 +343,16 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
 
   // - Output to Buf2
   chan_out = CHAN_NOT_OUT;
-  status=clSetKernelArg(store_kernel, 0, sizeof(cl_mem), (void *)&d_Buf2);
+  use_svm = 1;
+  // kernel stores using SVM based PCIe to host
+  status = clSetKernelArgSVMPointer(store_kernel, 0, (void*)h_outData);
   checkError(status, "Failed to set store kernel arg");
-  status=clSetKernelArg(store_kernel, 1, sizeof(cl_int), (void *)&chan_out);
+  status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&d_Buf2);
+  checkError(status, "Failed to set store kernel arg");
+  status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 1");
+  status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+  checkError(status, "Failed to set store kernel arg 3");
 
   // Kernel Execution
   status = clEnqueueTask(queue7, store_kernel, 0, NULL, &endExec_event);
@@ -358,20 +408,19 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   conv3D_time.siginv_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
 
   // Copy results from device to host
-  //cl_event readBuf_event;
-  cl_event readBuf_event;
-  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec();
-  status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, &readBuf_event);
-  status = clFinish(queue1);
-  checkError(status, "failed to finish reading DDR using PCIe");
+  status = clEnqueueSVMMap(queue1, CL_TRUE, CL_MAP_READ,
+    (void *)h_outData, sizeof(float2) * num_pts, 0, NULL, NULL);
+  checkError(status, "Failed to map out data");
 
-  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec() - conv3D_time.sig_pcie_rd_t;
+  memcpy(out, h_outData, num_bytes);
 
-  cl_ulong readBuf_start = 0, readBuf_end = 0;
-  clGetEventProfilingInfo(readBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &readBuf_start, NULL);
-  clGetEventProfilingInfo(readBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &readBuf_end, NULL);
+  status = clEnqueueSVMUnmap(queue1, (void *)h_outData, 0, NULL, NULL);
+  checkError(status, "Failed to unmap out data");
 
-  conv3D_time.sig_pcie_rd_t = (cl_double)(readBuf_end - readBuf_start) * (cl_double)(1e-06);
+  if (h_inData)
+    clSVMFree(context, h_inData);
+  if (h_outData)
+    clSVMFree(context, h_outData);
 
   queue_cleanup();
 

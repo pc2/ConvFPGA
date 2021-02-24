@@ -17,6 +17,7 @@ struct CONFIG{
   unsigned threads;
   bool noverify;
   bool cpuonly;
+  bool usesvm;
 };
 
 typedef struct cpu_timing {
