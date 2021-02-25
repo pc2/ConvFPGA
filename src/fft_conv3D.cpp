@@ -102,7 +102,7 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
 
   double conv_start = 0.0, conv_stop = 0.0;
   double filter_start = 0.0, filter_stop = 0.0;
-  cpu_t timing_cpu = {0.0, 0.0, 0};
+  cpu_t timing_cpu = {0.0, 0.0, false};
 
   for(unsigned i = 0; i < config.iter; i++){
     bool status = fpgaf_create_data(fftwf_filter, num_pts);
@@ -126,6 +126,7 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
     filter_start = getTimeinMilliSec();
     fftwf_execute(plan_filter);
     filter_stop = getTimeinMilliSec();
+    
     timing_cpu.filter_t += (filter_stop - filter_start);
 
     // Signal Transformation
@@ -133,8 +134,9 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
     fftwf_execute(plan_sig);
 
     // Multiplication
-    float2 temp;
+    #pragma omp parallel for num_threads(config.threads)
     for(unsigned i = 0; i < num_pts; i++){
+      float2 temp;
       temp.x = (fftwf_sig[i][0] * fftwf_filter[i][0]) - (fftwf_sig[i][1] * fftwf_filter[i][1]);
       temp.y = (fftwf_sig[i][0] * fftwf_filter[i][1]) + (fftwf_sig[i][1] * fftwf_filter[i][0]);
 
@@ -147,12 +149,20 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
     conv_stop = getTimeinMilliSec();
 
     timing_cpu.conv_t += (conv_stop - conv_start);
-    fftwf_free(fftwf_sig);
-    fftwf_free(fftwf_filter);
+
+    cout << "Iter: " << i << endl;
+    cout << "  Filter Exec: " << (filter_stop - filter_start);
+    cout << "  Conv3D Exec: " << (conv_stop - conv_start);
+    cout << endl;
   }
+
+  timing_cpu.filter_t = timing_cpu.filter_t / config.iter;
+  timing_cpu.conv_t = timing_cpu.conv_t / config.iter;
 
   cleanup_plans();
   fftwf_cleanup_threads();
+  fftwf_free(fftwf_sig);
+  fftwf_free(fftwf_filter);
 
   timing_cpu.valid = true;
   return timing_cpu;
@@ -183,6 +193,7 @@ bool fft_conv3D_cpu_verify(struct CONFIG& config, const float2 *sig, const float
 
   const unsigned fftw_plan = FFTW_ESTIMATE;
 
+  /*
   switch(fftw_plan){
     case FFTW_MEASURE:  cout << "FFTW Plan: Measure\n";
                         break;
@@ -195,6 +206,7 @@ bool fft_conv3D_cpu_verify(struct CONFIG& config, const float2 *sig, const float
     default: throw "Incorrect plan\n";
             break;
   }
+  */
 
   plan_filter = fftwf_plan_many_dft(dim, n, 1, fftwf_filter, NULL, istride, idist, fftwf_filter, NULL, ostride, odist, FFTW_FORWARD, fftw_plan);
 

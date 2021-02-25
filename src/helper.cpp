@@ -108,13 +108,13 @@ void print_config(CONFIG config){
   cout << "Points       = {"<< config.num << ", " << config.num << ", " << config.num << "}" << endl;
   cout << "Wisdom Path  = " << config.wisdomfile << endl;
   switch(FFTW_PLAN){
-    case FFTW_MEASURE:  cout << "FFTW Plan      = Measure\n";
+    case FFTW_MEASURE:  cout << "FFTW Plan    = Measure\n";
                         break;
-    case FFTW_ESTIMATE: cout << "FFTW Plan      = Estimate\n";
+    case FFTW_ESTIMATE: cout << "FFTW Plan    = Estimate\n";
                         break;
-    case FFTW_PATIENT:  cout << "FFTW Plan      = Patient\n";
+    case FFTW_PATIENT:  cout << "FFTW Plan    = Patient\n";
                         break;
-    case FFTW_EXHAUSTIVE: cout << "FFTW Plan    = Exhaustive\n";
+    case FFTW_EXHAUSTIVE: cout << "FFTW Plan   = Exhaustive\n";
                         break;
     default: throw "-- Incorrect plan set\n";
             break;
@@ -161,7 +161,7 @@ double getTimeinMilliseconds(){
 void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
 
   cout << endl << endl;
-  cout << "MEASUREMENTS \n";
+  cout << "MEASUREMENTS in ms\n";
   cout << "--------------\n";
   cout << "Points                 : " << config.num << "^3\n";
   cout << "Iterations             : " << config.iter << endl << endl;
@@ -170,16 +170,19 @@ void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
   cout << "FPGA:" << endl;
   cout << "-----" << endl;
   cout << "- Filter:" << endl;
-  cout << "  PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
+  if(!config.usesvm)
+    cout << "  PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
   cout << "  Execution           : "<< fpga_timing.filter_exec_t << endl;
   cout << endl;
 
   cout << "- Signal Convolution:" << endl;
-  cout << "  PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
+  if(!config.usesvm)
+    cout << "  PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
   cout << "  FFT + Conv          : "<< fpga_timing.sig_exec_t << endl;
   cout << "  Inverse FFT         : "<< fpga_timing.siginv_exec_t << endl;
   cout << "  Total Computation   : "<< fpga_timing.siginv_exec_t + fpga_timing.siginv_exec_t << endl;
-  cout << "  PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
+  if(!config.usesvm)
+    cout << "  PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Total API Time: "<< endl;
@@ -192,11 +195,12 @@ void disp_results(CONFIG config, cpu_t timing_cpu){
   cout << endl << endl;
   cout << "MEASUREMENTS \n";
   cout << "--------------\n";
-  cout << "Points          : " << config.num << "^3\n";
-  cout << "Iterations      : " << config.iter << endl << endl;
+  cout << "Points           : " << config.num << "^3\n";
+  cout << "Threads          : " << config.threads << endl;
+  cout << "Iterations       : " << config.iter << endl << endl;
 
   cout << "CPU:" << endl;
   cout << "----" << endl;
-  cout << "Filter Runtime   : "<< timing_cpu.filter_t << endl;
-  cout << "Conv3D Runtime   : "<< timing_cpu.conv_t << endl << endl;
+  cout << "Filter Runtime   : "<< timing_cpu.filter_t << "ms" << endl;
+  cout << "Conv3D Runtime   : "<< timing_cpu.conv_t << "ms" << endl << endl;
 }

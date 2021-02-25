@@ -99,7 +99,7 @@ int main(int argc, char* argv[]){
   #endif
     }
 
-    cout << "Iter: " << conv_config.iter << endl;
+    cout << "Iter: " << i << endl;
     cout << "- Filter " << endl;
     cout << "    Exec: " << timing_fpga.filter_pcie_wr_t;
     cout << "    Host to Dev: " << timing_fpga.filter_pcie_wr_t;
