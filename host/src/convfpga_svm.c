@@ -28,7 +28,7 @@
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
 fpga_t fpgaf_conv3D_svm(unsigned N, float2 *sig, float2 *filter, float2 *out) {
-  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
   if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){

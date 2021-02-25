@@ -26,7 +26,7 @@
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
 fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
-  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+  fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
   if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){
@@ -172,13 +172,15 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   //                             Buf3 (Filter)
   //                              |
   //  Buf1 -> Buf2 -> chanout -> .* -> Buf4 
-  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, sig, 0, NULL, &writeBuf_event);
-  clFinish(queue1);
+  cl_event writeSigBuf_event;
+  status = clEnqueueWriteBuffer(queue1, d_Buf1, CL_TRUE, 0, sizeof(float2) * num_pts, sig, 0, NULL, &writeSigBuf_event);
+  status = clFinish(queue1);
+  checkError(status, "failed to finish writing to buffer");
 
   cl_ulong sig_pcie_wr_start = 0, sig_pcie_wr_stop = 0;
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &sig_pcie_wr_start, NULL);
-  clGetEventProfilingInfo(writeBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &sig_pcie_wr_stop, NULL);
-  conv3D_time.sig_pcie_wr_t = (cl_double)(sig_pcie_wr_stop - sig_pcie_wr_stop) * 1e-06; 
+  clGetEventProfilingInfo(writeSigBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &sig_pcie_wr_start, NULL);
+  clGetEventProfilingInfo(writeSigBuf_event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &sig_pcie_wr_stop, NULL);
+  conv3D_time.sig_pcie_wr_t = (cl_double)(sig_pcie_wr_stop - sig_pcie_wr_start) * (cl_double)1e-06; 
 
   status=clSetKernelArg(fetch_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch1 kernel arg");
@@ -360,12 +362,9 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   // Copy results from device to host
   //cl_event readBuf_event;
   cl_event readBuf_event;
-  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec();
   status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, &readBuf_event);
   status = clFinish(queue1);
   checkError(status, "failed to finish reading DDR using PCIe");
-
-  conv3D_time.sig_pcie_rd_t = getTimeinMilliSec() - conv3D_time.sig_pcie_rd_t;
 
   cl_ulong readBuf_start = 0, readBuf_end = 0;
   clGetEventProfilingInfo(readBuf_event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &readBuf_start, NULL);

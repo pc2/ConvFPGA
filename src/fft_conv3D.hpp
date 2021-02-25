@@ -11,7 +11,7 @@ extern "C"{
 }
 struct CONFIG{
   std::string path;
-  std::string out_fname;
+  std::string wisdomfile;
   unsigned num; 
   unsigned iter;
   unsigned threads;

@@ -66,7 +66,7 @@ int main(int argc, char* argv[]){
     return EXIT_FAILURE;
   }
 
-  fpga_t timing_fpga;
+  fpga_t timing_fpga, avg_timing_fpga;
   double temp_timer = 0.0, total_api_time = 0.0;
   for(size_t i = 0; i < conv_config.iter; i++){
 
@@ -80,6 +80,14 @@ int main(int argc, char* argv[]){
       timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
       total_api_time += getTimeinMilliSec() - temp_timer;
     }
+
+    if(timing_fpga.valid == false){
+      cerr << "Invalid execution, timing found to be 0";
+      free(sig);
+      free(filter);
+      free(out);
+      return EXIT_FAILURE;
+    }
     if(!conv_config.noverify){
   #ifdef USE_FFTW
       status = fft_conv3D_cpu_verify(conv_config, sig, filter, out);
@@ -91,14 +99,32 @@ int main(int argc, char* argv[]){
   #endif
     }
 
-    if(timing_fpga.valid == false){
-      cerr << "Invalid execution, timing found to be 0";
-      free(sig);
-      free(filter);
-      free(out);
-      return EXIT_FAILURE;
-    }
+    cout << "Iter: " << conv_config.iter << endl;
+    cout << "- Filter " << endl;
+    cout << "    Exec: " << timing_fpga.filter_pcie_wr_t;
+    cout << "    Host to Dev: " << timing_fpga.filter_pcie_wr_t;
+    cout << endl;
+    cout << "- Signal " << endl;
+    cout << "    Exec: " << timing_fpga.sig_exec_t;
+    cout << "    Inv : " << timing_fpga.siginv_exec_t;
+    cout << "    Host to Dev: " << timing_fpga.sig_pcie_wr_t;
+    cout << "    Dev to Host: " << timing_fpga.sig_pcie_rd_t;
+    cout << endl;
+
+    avg_timing_fpga.filter_exec_t += timing_fpga.filter_exec_t;
+    avg_timing_fpga.filter_pcie_wr_t += timing_fpga.filter_pcie_wr_t;
+    avg_timing_fpga.sig_exec_t += timing_fpga.sig_exec_t;
+    avg_timing_fpga.sig_pcie_wr_t += timing_fpga.sig_pcie_wr_t;
+    avg_timing_fpga.sig_pcie_rd_t += timing_fpga.sig_pcie_rd_t;
+    avg_timing_fpga.siginv_exec_t += timing_fpga.siginv_exec_t;
   }  // iter
+
+  avg_timing_fpga.filter_exec_t = avg_timing_fpga.filter_exec_t / conv_config.iter;
+  avg_timing_fpga.filter_pcie_wr_t = avg_timing_fpga.filter_pcie_wr_t / conv_config.iter;
+  avg_timing_fpga.sig_exec_t = avg_timing_fpga.sig_exec_t / conv_config.iter;
+  avg_timing_fpga.sig_pcie_rd_t = avg_timing_fpga.sig_pcie_rd_t / conv_config.iter;
+  avg_timing_fpga.sig_pcie_wr_t = avg_timing_fpga.sig_pcie_wr_t / conv_config.iter;
+  avg_timing_fpga.siginv_exec_t = avg_timing_fpga.siginv_exec_t / conv_config.iter;
   double timing_api = total_api_time / conv_config.iter;
 
   // destroy FFT input and output
@@ -110,7 +136,7 @@ int main(int argc, char* argv[]){
   fpga_final();
 
   // Verify convolution with library
-  disp_results(conv_config, timing_fpga, timing_api); 
+  disp_results(conv_config, avg_timing_fpga, timing_api); 
   
   return EXIT_SUCCESS;
 }

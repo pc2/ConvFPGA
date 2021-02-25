@@ -1,8 +1,10 @@
 //  Author: Arjun Ramaswami
 #include <iostream>
 #include <iomanip>
+#include <fftw3.h>
 #include "cxxopts.hpp"
 #include "helper.hpp"
+#include "config.h"
 
 using namespace std;
 
@@ -55,7 +57,7 @@ void parse_args(int argc, char* argv[], CONFIG &config){
     cxxopts::Options options("Convolution3D", "3D Conv Filter on incoming images");
     options.add_options()
       ("p, path", "Path to bitstream", cxxopts::value<string>())
-      ("o, out", "Filename to output results", cxxopts::value<string>()->default_value("a.out"))
+      ("w, wisdomfile", "File to wisdom", cxxopts::value<string>()->default_value("a.out"))
       ("n, num", "Size of FFT dim", cxxopts::value<unsigned>()->default_value("64"))
       ("i, iter", "Number of iterations", cxxopts::value<unsigned>()->default_value("1"))
       ("t, threads", "Number of threads", cxxopts::value<unsigned>()->default_value("1"))
@@ -82,9 +84,8 @@ void parse_args(int argc, char* argv[], CONFIG &config){
         exit(1);
       }
     }
-    if(opt.count("out")){
-      config.out_fname = opt["out"].as<string>();
-      cout << "Using default output filename - a.out" << endl;
+    if(opt.count("wisdomfile")){
+      config.wisdomfile = opt["wisdomfile"].as<string>();
     }
 
     config.num = opt["num"].as<unsigned>();
@@ -105,15 +106,20 @@ void print_config(CONFIG config){
   cout << "---------------\n";
   cout << "Bitstream    = " << config.path << endl;
   cout << "Points       = {"<< config.num << ", " << config.num << ", " << config.num << "}" << endl;
-  #ifdef MEASURE
-  cout << "FFTW Plan    = Measure     \n";
-  #elif PATIENT
-  cout << "FFTW Plan    = Patient     \n";
-  #elif EXHAUSTIVE
-  cout << "FFTW Plan    = Exhaustive  \n";
-  #else
-  cout << "FFTW Plan    = Estimate    \n";
-  #endif
+  cout << "Wisdom Path  = " << config.wisdomfile << endl;
+  switch(FFTW_PLAN){
+    case FFTW_MEASURE:  cout << "FFTW Plan      = Measure\n";
+                        break;
+    case FFTW_ESTIMATE: cout << "FFTW Plan      = Estimate\n";
+                        break;
+    case FFTW_PATIENT:  cout << "FFTW Plan      = Patient\n";
+                        break;
+    case FFTW_EXHAUSTIVE: cout << "FFTW Plan    = Exhaustive\n";
+                        break;
+    default: throw "-- Incorrect plan set\n";
+            break;
+  }
+
   cout << "Threads      = "<< config.threads << endl;
   cout << "Iterations   = "<< config.iter << endl;
   cout << "----------------\n\n";
@@ -166,7 +172,6 @@ void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
   cout << "- Filter:" << endl;
   cout << "  PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
   cout << "  Execution           : "<< fpga_timing.filter_exec_t << endl;
-  cout << "  PCIe Device to Host : "<< fpga_timing.filter_pcie_rd_t << endl;
   cout << endl;
 
   cout << "- Signal Convolution:" << endl;

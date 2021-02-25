@@ -22,12 +22,11 @@ typedef struct {
  * Record time in milliseconds of different FPGA runtime stages
  */
 typedef struct fpga_timing {
-  double filter_pcie_rd_t;/**< Time to read from DDR to host using PCIe bus  */ 
   double filter_pcie_wr_t;/**< Time to write from DDR to host using PCIe bus */ 
   double filter_exec_t;   /**< Kernel execution time from CPU wall clock time */
 
-  double sig_pcie_rd_t;   /**< Time to read from DDR to host using PCIe bus  */ 
   double sig_pcie_wr_t;   /**< Time to write from DDR to host using PCIe bus */ 
+  double sig_pcie_rd_t;   /**< Time to read from DDR to host using PCIe bus  */ 
   double sig_exec_t;    /**< Kernel execution time from CPU wall clock time */
   double siginv_exec_t;  /**< Kernel execution time from CPU wall clock time */
 

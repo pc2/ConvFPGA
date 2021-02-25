@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <omp.h>
 #include <fftw3.h>
 #include <math.h>
@@ -49,32 +50,93 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
   int istride = 1, ostride = 1;
   //const int *inembed = n, *onembed = n;
 
-  const unsigned fftw_plan = FFTW_PLAN;
-
-  switch(fftw_plan){
-    case FFTW_MEASURE:  cout << "FFTW Plan: Measure\n";
-                        break;
-    case FFTW_ESTIMATE: cout << "FFTW Plan: Estimate\n";
-                        break;
-    case FFTW_PATIENT:  cout << "FFTW Plan: Patient\n";
-                        break;
-    case FFTW_EXHAUSTIVE: cout << "FFTW Plan: Exhaustive\n";
-                        break;
-    default: throw "Incorrect plan\n";
-            break;
-  }
-
   int threads_ok = fftwf_init_threads(); 
   if(threads_ok == 0){
     throw "Something went wrong with Multithreaded FFTW! Exiting... \n";
   }
+  
   fftwf_plan_with_nthreads((int)config.threads);
+  unsigned fftw_plan = FFTW_PLAN;
+  //bool using_wisdom = true, wis_export = true;
 
+  int status = fftwf_import_wisdom_from_filename("wisdom.txt");
+  //int status = fftw_import_wisdom_from_filename(config.wisdomfile.c_str());
+  if(status == 0){
+    cout << "Cannot import wisdom" << endl;
+  }
+  else{
+    cout << "Importing wisdom" << endl;
+    //fftw_plan = FFTW_WISDOM_ONLY | fftw_plan;
+  }
+
+
+  /*
+  ofstream wisfile;
+  wisfile.open(config.wisdomfile);
+  if(wisfile.is_open()){
+    // File exists and wisdom can be imported
+    cout << "Importing Wisdom from path: " << config.wisdomfile << endl;
+    // If wisdom cannot be imported, create wisdom in the same filename
+    int status = fftw_import_wisdom_from_filename(config.wisdomfile.c_str());
+    if(status != 0){ // use wisdom
+      cout << "File Found" << endl;
+      fftw_plan = FFTW_WISDOM_ONLY | fftw_plan;
+      wisfile.close();
+    }
+    else{// File exists but without any content, export to file
+      cout << "-- Wisdom not found in file!" << endl;
+      using_wisdom = false;
+      wis_export = true;
+    }
+  }
+  else{
+    // No such file exists
+    cout << "No file found in path\n";
+    using_wisdom = false;
+    wis_export = false;
+    wisfile.close();
+  }
+  */
+  cout << "-- Creating Plan" << endl;
+  switch(fftw_plan){
+    case FFTW_MEASURE:  cout << "-- FFTW Plan: Measure\n";
+                        break;
+    case FFTW_ESTIMATE: cout << "-- FFTW Plan: Estimate\n";
+                        break;
+    case FFTW_PATIENT:  cout << "-- FFTW Plan: Patient\n";
+                        break;
+    case FFTW_EXHAUSTIVE: cout << "-- FFTW Plan: Exhaustive\n";
+                        break;
+    default: throw "-- Incorrect plan set\n";
+            break;
+  }
+
+  double plan_start = getTimeinMilliSec();
   plan_filter = fftwf_plan_many_dft(dim, n, 1, fftwf_filter, NULL, istride, idist, fftwf_filter, NULL, ostride, odist, FFTW_FORWARD, fftw_plan);
 
   plan_sig = fftwf_plan_many_dft(dim, n, 1, fftwf_sig, NULL, istride, idist, fftwf_sig, NULL, ostride, odist, FFTW_FORWARD, fftw_plan);
 
   plan_inv_sig = fftwf_plan_many_dft(dim, n, 1, fftwf_sig, NULL, istride, idist, fftwf_sig, NULL, ostride, odist, FFTW_BACKWARD, fftw_plan);
+  double plan_time = getTimeinMilliSec() - plan_start;
+
+  cout << "Time to Plan: " << plan_time << endl;
+
+  if(status == 0){
+    int resWisdom = fftwf_export_wisdom_to_filename("wisdom.txt"); 
+    printf ("Wisdom export res = %d\n", resWisdom);
+  }
+
+  /*
+  if(using_wisdom == false && wis_export == true){
+    cout << "Exporting wisdom created to path: " << config.wisdomfile << endl;
+    //cout << "Exporting wisdom created to path: " << config.wisdomfile << endl;
+    //if(!fftw_export_wisdom_to_filename(wisfile)){
+    if(fftw_export_wisdom_to_filename(config.wisdomfile.c_str()) == 0){
+      cerr << "Could not export wisdom to path\n";
+    }
+    wisfile.close();
+  }
+  */
 
   double conv_start = 0.0, conv_stop = 0.0;
   double filter_start = 0.0, filter_stop = 0.0;
