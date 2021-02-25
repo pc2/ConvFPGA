@@ -360,7 +360,6 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   conv3D_time.siginv_exec_t = (cl_double)(kernel_end - kernel_start) * (cl_double)(1e-06);
 
   // Copy results from device to host
-  //cl_event readBuf_event;
   cl_event readBuf_event;
   status = clEnqueueReadBuffer(queue1, d_Buf2, CL_TRUE, 0, sizeof(float2) * num_pts, out, 0, NULL, &readBuf_event);
   status = clFinish(queue1);
