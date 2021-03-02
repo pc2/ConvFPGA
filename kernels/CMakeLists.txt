@@ -68,7 +68,7 @@ separate_arguments(PROF_FLAGS)
 #   - ${kernel_name}_syn: to generate synthesis binary
 ##
 set(CL_PATH "${convKernels_SOURCE_DIR}")
-set(kernels conv3D conv3D_svm conv3D_svm2)
+set(kernels conv3D conv3D_svm)
 
 if (INTELFPGAOPENCL_FOUND)
   gen_fft_targets(${kernels})

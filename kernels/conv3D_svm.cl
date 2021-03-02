@@ -36,7 +36,7 @@ kernel void fetch(
     unsigned where = (step & ((N * DEPTH) - 1)) * 8; 
 
     float2x8 data;
-    /*
+    
     if (step < (N * DEPTH) && use_svm == 0) {
       data.i0 = src_ddr[where + 0];
       data.i1 = src_ddr[where + 1];
@@ -61,33 +61,6 @@ kernel void fetch(
       data.i0 = data.i1 = data.i2 = data.i3 = 
                 data.i4 = data.i5 = data.i6 = data.i7 = 0;
     }
-    */
-
-    if (step < (N * DEPTH) && use_svm == 0) {
-      data.i0 = src_ddr[where + 0];
-      data.i1 = src_ddr[where + 1];
-      data.i2 = src_ddr[where + 2];
-      data.i3 = src_ddr[where + 3];
-      data.i4 = src_ddr[where + 4];
-      data.i5 = src_ddr[where + 5];
-      data.i6 = src_ddr[where + 6];
-      data.i7 = src_ddr[where + 7];
-    } 
-    else if(step < (N * DEPTH) && use_svm == 1){
-      data.i0 = src_host[where + 0];
-      data.i1 = src_host[where + 1];
-      data.i2 = src_host[where + 2];
-      data.i3 = src_host[where + 3];
-      data.i4 = src_host[where + 4];
-      data.i5 = src_host[where + 5];
-      data.i6 = src_host[where + 6];
-      data.i7 = src_host[where + 7];
-    } 
-    else{
-      data.i0 = data.i1 = data.i2 = data.i3 = 
-                data.i4 = data.i5 = data.i6 = data.i7 = 0;
-    }
-
 
     is_bitrevA = ( (step & ((N / 8) - 1)) == 0) ? !is_bitrevA: is_bitrevA;
 

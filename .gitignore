@@ -3,6 +3,8 @@ debug*/
 bin/
 vscode/
 scripts/
+wisdom/
+data/
 
 tags
 *.DS_Store

@@ -101,7 +101,7 @@ int main(int argc, char* argv[]){
 
     cout << "Iter: " << i << endl;
     cout << "- Filter " << endl;
-    cout << "    Exec: " << timing_fpga.filter_pcie_wr_t;
+    cout << "    Exec: " << timing_fpga.filter_exec_t;
     cout << "    Host to Dev: " << timing_fpga.filter_pcie_wr_t;
     cout << endl;
     cout << "- Signal " << endl;
