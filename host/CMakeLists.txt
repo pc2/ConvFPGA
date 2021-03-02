@@ -8,6 +8,7 @@ add_library(convfpga STATIC
               ${PROJECT_SOURCE_DIR}/src/fpga_init.c 
               ${PROJECT_SOURCE_DIR}/src/convfpga.c 
               ${PROJECT_SOURCE_DIR}/src/convfpga_svm.c 
+              ${PROJECT_SOURCE_DIR}/src/convfpga_svm_batch.c 
               ${PROJECT_SOURCE_DIR}/src/svm.c
               ${PROJECT_SOURCE_DIR}/src/opencl_utils.c
               ${PROJECT_SOURCE_DIR}/src/misc.c)

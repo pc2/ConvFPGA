@@ -74,4 +74,5 @@ extern fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out)
  */
 extern fpga_t fpgaf_conv3D_svm(unsigned N, float2 *sig, float2 *filter, float2 *out);
 
+extern fpga_t fpgaf_conv3D_svm_batch(unsigned N, float2 *sig, float2 *filter, float2 *out);
 #endif
