@@ -15,9 +15,11 @@ struct CONFIG{
   unsigned num; 
   unsigned iter;
   unsigned threads;
+  unsigned batch;
   bool noverify;
   bool cpuonly;
   bool usesvm;
+  bool emulate;
 };
 
 typedef struct cpu_timing {

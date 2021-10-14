@@ -10,9 +10,7 @@ using namespace std;
 
 int main(int argc, char* argv[]){
 
-  //std::string inp_fname, out_fname;
   CONFIG conv_config;
-
   parse_args(argc, argv, conv_config);
   print_config(conv_config);
 
@@ -33,110 +31,79 @@ int main(int argc, char* argv[]){
     #endif
   }
 
-  const unsigned num = conv_config.num;
-  const unsigned num_pts = num * num * num;
-  const size_t inp_sz = sizeof(float2) * num * num * num;
-
-  float2 *filter = (float2*)fpgaf_complex_malloc(inp_sz);
-  float2 *sig = (float2*)fpgaf_complex_malloc(inp_sz);
-  float2 *out = (float2*)fpgaf_complex_malloc(inp_sz);
-
-  bool status = fpgaf_create_data(filter, num_pts);
-  if(!status){
-    cerr << "Error in Data Creation" << endl;
-    free(sig);
-    free(filter);
-    free(out);
-    return EXIT_FAILURE;
+  const char* platform;
+  if(conv_config.emulate){
+    platform = "Intel(R) FPGA Emulation Platform for OpenCL(TM)";
   }
-  status = fpgaf_create_data(sig, num_pts);
-  if(!status){
-    cerr << "Error in Data Creation" << endl;
-    free(sig);
-    free(filter);
-    free(out);
-    return EXIT_FAILURE;
+  else{
+    platform = "Intel(R) FPGA SDK for OpenCL(TM)";
   }
 
-  const char* platform = "Intel(R) FPGA SDK for OpenCL(TM)";
-  
   int isInit = fpga_initialize(platform, conv_config.path.c_str(), conv_config.usesvm);
   if(isInit != 0){
     cerr << "FPGA initialization error\n";
     return EXIT_FAILURE;
   }
 
-  fpga_t timing_fpga, avg_timing_fpga;
-  double temp_timer = 0.0, total_api_time = 0.0;
-  for(size_t i = 0; i < conv_config.iter; i++){
+  const unsigned num = conv_config.num;
+  const unsigned batch = conv_config.batch;
 
-    if(conv_config.usesvm){
-      temp_timer = getTimeinMilliSec();
-      timing_fpga = fpgaf_conv3D_svm(conv_config.num, sig, filter, out);
-      total_api_time += getTimeinMilliSec() - temp_timer;
-    }
-    else{
-      temp_timer = getTimeinMilliSec();
-      timing_fpga = fpgaf_conv3D(conv_config.num, sig, filter, out);
-      total_api_time += getTimeinMilliSec() - temp_timer;
-    }
+  const size_t filter_numpts = num * num * num;
+  const size_t filter_inp_sz = sizeof(float2) * num * num * num;
 
-    if(timing_fpga.valid == false){
-      cerr << "Invalid execution, timing found to be 0";
-      free(sig);
-      free(filter);
-      free(out);
-      return EXIT_FAILURE;
-    }
-    if(!conv_config.noverify){
-  #ifdef USE_FFTW
-      status = fft_conv3D_cpu_verify(conv_config, sig, filter, out);
-      if(!status){
-        free(sig);
-        free(filter);
-        free(out);
+  const size_t sig_numpts = num * num * num * batch;
+  const size_t sig_sz = sizeof(float2) * num * num * num * batch;
+
+  float2 *filter = (float2*)fpgaf_complex_malloc(filter_inp_sz);
+  float2 *sig = (float2*)fpgaf_complex_malloc(sig_sz);
+  float2 *out = (float2*)fpgaf_complex_malloc(sig_sz);
+  fpga_t runtime[conv_config.iter];
+
+  try{
+    create_data(filter, filter_numpts);
+    create_data(sig, sig_numpts);
+
+    for(unsigned i = 0; i < conv_config.iter; i++){
+      cout << endl << i << ": Calculating Conv3D" << endl;
+
+      if(conv_config.usesvm && conv_config.batch > 1)
+        runtime[i] = fpgaf_conv3D_svm_batch(conv_config.num, sig, filter, out, batch);
+      else if(conv_config.usesvm  && conv_config.batch == 1)
+        runtime[i] = fpgaf_conv3D_svm(conv_config.num, sig, filter, out);
+      else if(!conv_config.usesvm  && conv_config.batch > 1)
+        throw "Non-SVM Batch not implemented for Convolution 3D";
+      else
+        runtime[i] = fpgaf_conv3D(conv_config.num, sig, filter, out);
+
+      if(runtime[i].valid == false){ throw "FPGA execution found invalid";}
+
+      if(!conv_config.noverify){
+        if(!fft_conv3D_cpu_verify(conv_config, sig, filter, out)){
+          char excp[80];
+          snprintf(excp, 80, "Iter %u: FPGA result incorrect in comparison to CPU\n", i);
+          throw runtime_error(excp);
+        }
       }
-  #endif
     }
-
-    cout << "Iter: " << i << endl;
-    cout << "- Filter " << endl;
-    cout << "    Exec: " << timing_fpga.filter_exec_t;
-    cout << "    Host to Dev: " << timing_fpga.filter_pcie_wr_t;
-    cout << endl;
-    cout << "- Signal " << endl;
-    cout << "    Exec: " << timing_fpga.sig_exec_t;
-    cout << "    Inv : " << timing_fpga.siginv_exec_t;
-    cout << "    Host to Dev: " << timing_fpga.sig_pcie_wr_t;
-    cout << "    Dev to Host: " << timing_fpga.sig_pcie_rd_t;
-    cout << endl;
-
-    avg_timing_fpga.filter_exec_t += timing_fpga.filter_exec_t;
-    avg_timing_fpga.filter_pcie_wr_t += timing_fpga.filter_pcie_wr_t;
-    avg_timing_fpga.sig_exec_t += timing_fpga.sig_exec_t;
-    avg_timing_fpga.sig_pcie_wr_t += timing_fpga.sig_pcie_wr_t;
-    avg_timing_fpga.sig_pcie_rd_t += timing_fpga.sig_pcie_rd_t;
-    avg_timing_fpga.siginv_exec_t += timing_fpga.siginv_exec_t;
-  }  // iter
-
-  avg_timing_fpga.filter_exec_t = avg_timing_fpga.filter_exec_t / conv_config.iter;
-  avg_timing_fpga.filter_pcie_wr_t = avg_timing_fpga.filter_pcie_wr_t / conv_config.iter;
-  avg_timing_fpga.sig_exec_t = avg_timing_fpga.sig_exec_t / conv_config.iter;
-  avg_timing_fpga.sig_pcie_rd_t = avg_timing_fpga.sig_pcie_rd_t / conv_config.iter;
-  avg_timing_fpga.sig_pcie_wr_t = avg_timing_fpga.sig_pcie_wr_t / conv_config.iter;
-  avg_timing_fpga.siginv_exec_t = avg_timing_fpga.siginv_exec_t / conv_config.iter;
-  double timing_api = total_api_time / conv_config.iter;
-
-  // destroy FFT input and output
-  free(sig);
-  free(filter);
-  free(out);
+  }
+  catch(const char* msg){
+    cerr << msg << endl;
+    fpga_final();
+    free(sig);
+    free(filter);
+    free(out);
+    return EXIT_FAILURE;
+  }
 
   // destroy fpga state
   fpga_final();
 
   // Verify convolution with library
-  disp_results(conv_config, avg_timing_fpga, timing_api); 
+  disp_results(conv_config, runtime); 
   
+  free(sig);
+  free(filter);
+  free(out);
+
   return EXIT_SUCCESS;
 }

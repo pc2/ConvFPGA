@@ -47,7 +47,7 @@ typedef struct fpga_timing {
           -4 Failed to create program, file not found in path
           -5 Device does not support required SVM
  */
-extern int fpga_initialize(const char *platform_name, const char *path, bool use_svm);
+extern int fpga_initialize(const char *platform_name, const char *path, const bool use_svm);
 
 /** 
  * @brief Release FPGA Resources
@@ -65,14 +65,14 @@ extern void* fpgaf_complex_malloc(const size_t sz);
  * @brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA
  * @return fpga_t : time taken in milliseconds for data transfers and execution
  */
-extern fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out);
+extern fpga_t fpgaf_conv3D(const unsigned N, float2 *sig, float2 *filter, float2 *out);
 
 /**
  * @brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA and Shared Virtual Memory for Host to Device Communication
  * @param  interleaving  : toggle interleaved device memory
  * @return fpga_t : time taken in milliseconds for data transfers and execution
  */
-extern fpga_t fpgaf_conv3D_svm(unsigned N, float2 *sig, float2 *filter, float2 *out);
+extern fpga_t fpgaf_conv3D_svm(const unsigned N, float2 *sig, float2 *filter, float2 *out);
 
-extern fpga_t fpgaf_conv3D_svm_batch(unsigned N, float2 *sig, float2 *filter, float2 *out);
+extern fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, float2 *out, const unsigned how_many);
 #endif

@@ -12,21 +12,18 @@ function(gen_fft_targets)
 
   foreach(kernel_fname ${ARGN})
 
-
     set(CL_SRC "${CL_PATH}/${kernel_fname}.cl")
     set(CL_INCL_DIR "-I${CMAKE_BINARY_DIR}/kernels/common")
     set(CL_HEADER "${CMAKE_BINARY_DIR}/kernels/common/conv_config.h")
 
-    message("    -- Kernel: ${CL_SRC}")
-
     set(EMU_BSTREAM 
-        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/emu_${FFT_SIZE}_${kernel_fname}/${kernel_fname}.aocx")
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FPGA_BOARD_NAME}/emulation/${kernel_fname}_${FFT_SIZE}_${BURST}/${kernel_fname}.aocx")
     set(REP_BSTREAM 
-        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/rep_${FFT_SIZE}_${kernel_fname}/${kernel_fname}.aocr")
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FPGA_BOARD_NAME}/reports/${kernel_fname}_${FFT_SIZE}_${BURST}/${kernel_fname}.aocr")
     set(PROF_BSTREAM 
-        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/prof_${FFT_SIZE}_${kernel_fname}/${kernel_fname}.aocx")
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FPGA_BOARD_NAME}/profile/${kernel_fname}_${FFT_SIZE}_${BURST}/${kernel_fname}.aocx")
     set(SYN_BSTREAM 
-        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/syn_${FFT_SIZE}_${kernel_fname}/${kernel_fname}.aocx")
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${FPGA_BOARD_NAME}/${SDK_VERSION}sdk_${BSP_VERSION}bsp/${kernel_fname}_${BURST}/${kernel_fname}_${FFT_SIZE}.aocx")
 
     # Emulation Target
     add_custom_command(OUTPUT ${EMU_BSTREAM}

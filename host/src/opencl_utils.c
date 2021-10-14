@@ -11,7 +11,6 @@
 #include "CL/opencl.h"
 #include "opencl_utils.h"
 #include "convfpga/convfpga.h"
-
 // function prototype
 static void tolowercase(const char *p, char *q);
 static size_t loadBinary(const char *binary_path, char **buf);
@@ -50,9 +49,7 @@ cl_platform_id findPlatform(const char *platform_name){
   char name_search[pl_len + 1];   // VLA
   tolowercase(platform_name, name_search);
 
-#ifndef NDEBUG
-  printf("Num of Platforms found - %d\n", num_platforms);
-#endif
+  printf("-- %d platforms found\n", num_platforms);
 
   // Search the platforms for the platform name passed as argument
   for(int i = 0; i < num_platforms; i++){
@@ -75,9 +72,7 @@ cl_platform_id findPlatform(const char *platform_name){
     }
 
     tolowercase(plat_name, plat_name_lc);
-#ifndef NDEBUG
-    printf("  %d - %s \n", i, plat_name_lc);
-#endif
+    printf("\t%d: %s\n", i, plat_name_lc);
     if( strstr(plat_name_lc, name_search)){
       cl_platform_id pid = pids[i];
       free(pids);
@@ -146,7 +141,7 @@ cl_program getProgramWithBinary(cl_context context, cl_device_id *devices, cl_ui
   char *binary, *binaries[num_devices];
   cl_int bin_status, status;
 
-  if(num_devices == 0)
+  if(num_devices == 0 || context == NULL)
     return NULL;
 
   if (!fileExists(path)){

@@ -4,8 +4,27 @@ project(convKernels VERSION 1.0
             DESCRIPTION "Kernels for 3D FFT based convolution using FPGAs"
             LANGUAGES C CXX)
 
-# OpenCL kernel targets generation
-## setup cmake variables to generate header file
+set(FPGA_BOARD_NAME $ENV{FPGA_BOARD_NAME} CACHE STRING "Target Board Name")
+if(DEFINED FPGA_BOARD_NAME)
+  message("-- FPGA Board Name: ${FPGA_BOARD_NAME}")
+else()
+  message(ERROR, "No Target board found")
+endif()  
+
+set(SDK_VERSION $ENV{QUARTUS_VERSION} CACHE STRING "SDK Version")
+if(SDK_VERSION)
+  message("-- SDK Version: ${SDK_VERSION}")
+else()
+  message(ERROR, "No SDK Version Found")
+endif()
+
+set(BSP_VERSION $ENV{QUARTUS_VERSION_BSP} CACHE STRING "BSP Version")
+if(BSP_VERSION)
+  message("-- BSP Version: ${BSP_VERSION}")
+else()
+  message(ERROR, "No BSP Found")
+endif()
+
 set(LOG_POINTS 3 CACHE STRING "Log of per sample data points")
 math(EXPR POINTS "1 << ${LOG_POINTS}")
 
@@ -16,44 +35,44 @@ message("-- FFT size is ${FFT_SIZE}")
 math(EXPR DEPTH "1 << (${LOG_FFT_SIZE} + ${LOG_FFT_SIZE} - ${LOG_POINTS})")
 message("-- DEPTH: ${DEPTH}")
 
-set(DDR_BUFFER_LOCATION "DDR" CACHE STRING "Buffer location of 3d Transpose")
-set_property(CACHE DDR_BUFFER_LOCATION PROPERTY STRINGS "DDR" "device")
-
-set(SVM_HOST_BUFFER_LOCATION "" CACHE STRING "SVM host buffer location")
-set_property(CACHE SVM_HOST_BUFFER_LOCATION PROPERTY STRINGS "" "host")
-
-message("-- Buffer location for 3d Transpose is ${DDR_BUFFER_LOCATION}")
-message("-- SVM host Buffer location ${SVM_BUFFER_LOCATION}")
-
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/common/conv_config.h.in"
   "${CMAKE_BINARY_DIR}/kernels/common/conv_config.h"
   ESCAPE_QUOTES
 )
 
-##
-# Get FPGA Board Name from env variable or use default
-##
-if(NOT DEFINED FPGA_BOARD_NAME)
-  if(DEFINED $ENV{FPGA_BOARD_NAME})
-    set(FPGA_BOARD_NAME $ENV{FPGA_BOARD_NAME})
-  else()
-    set(FPGA_BOARD_NAME p520_hpc_sg280l)
-  endif()
+set(BURST_INTERLEAVING CACHE BOOL "Enable burst interleaving")
+if(BURST_INTERLEAVING)
+  set(INTERLEAVING "")
+  set(BURST "burstinter")
+  message("-- Burst interleaved global memory accesses")
+else()
+  set(INTERLEAVING "-no-interleaving=default")
+  set(BURST "nointer")
+  message("-- Non-interleaved global memory accesses")
 endif()
-set(FPGA_BOARD_NAME ${FPGA_BOARD_NAME} CACHE STRING "Target FPGA Board")
 
 if(${FPGA_BOARD_NAME} STREQUAL "pac_s10_usm")
-  set(BOARD_PACKAGE "-board-package=/cm/shared/opt/intel_oneapi/beta-10/intelfpgadpcpp/2021.1-beta10/board/intel_s10sx_pac_usm/")
+  set(DDR_BUFFER_LOCATION "device" CACHE STRING "Buffer location of 3d Transpose")
+  set(SVM_HOST_BUFFER_LOCATION "host" CACHE STRING "SVM host buffer location")
+elseif(${FPGA_BOARD_NAME} STREQUAL "p520_hpc_sg280l")
+  set(DDR_BUFFER_LOCATION "DDR" CACHE STRING "Buffer location of 3d Transpose")
+  set(SVM_HOST_BUFFER_LOCATION "" CACHE STRING "SVM host buffer location")
 else()
-  set(BOARD_PACKAGE "")
+  set(DDR_BUFFER_LOCATION "" CACHE STRING "Buffer location of 3d Transpose")
+  set(SVM_HOST_BUFFER_LOCATION "" CACHE STRING "SVM host buffer location")
 endif()
-message("-- Board Package: ${BOARD_PACKAGE}")
+
+set_property(CACHE DDR_BUFFER_LOCATION PROPERTY STRINGS "DDR" "device" "")
+set_property(CACHE SVM_HOST_BUFFER_LOCATION PROPERTY STRINGS "" "host")
+
+message("-- Buffer location for 3d Transpose: ${DDR_BUFFER_LOCATION}")
+message("-- SVM host Buffer location: ${SVM_HOST_BUFFER_LOCATION}")
 
 ## Flags for different target options
-set(AOC_FLAGS "-g -v -no-interleaving=default ${BOARD_PACKAGE}" CACHE STRING "AOC compiler flags")
+set(AOC_FLAGS "-g -v ${INTERLEAVING} -board=${FPGA_BOARD_NAME}" CACHE STRING "AOC compiler flags")
 separate_arguments(AOC_FLAGS)
-set(EMU_FLAGS "-legacy-emulator -march=emulator" CACHE STRING "AOC emulation flags")
+set(EMU_FLAGS "-march=emulator" CACHE STRING "AOC emulation flags")
 separate_arguments(EMU_FLAGS)
 set(REP_FLAGS "-report -rtl" CACHE STRING "AOC report flags")
 separate_arguments(REP_FLAGS)

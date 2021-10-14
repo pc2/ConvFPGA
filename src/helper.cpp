@@ -1,6 +1,7 @@
 //  Author: Arjun Ramaswami
 #include <iostream>
 #include <iomanip>
+#include <math.h>
 #include <fftw3.h>
 #include "cxxopts.hpp"
 #include "helper.hpp"
@@ -62,8 +63,10 @@ void parse_args(int argc, char* argv[], CONFIG &config){
       ("i, iter", "Number of iterations", cxxopts::value<unsigned>()->default_value("1"))
       ("t, threads", "Number of threads", cxxopts::value<unsigned>()->default_value("1"))
       ("y, noverify", "No verification", cxxopts::value<bool>()->default_value("false") )
+      ("b, batch", "Num of even batches", cxxopts::value<unsigned>()->default_value("1") )
       ("c, cpu-only", "CPU FFTW Only", cxxopts::value<bool>()->default_value("false") )
       ("s, usesvm", "SVM enabled", cxxopts::value<bool>()->default_value("false") )
+      ("e, emulate", "toggle emulation", cxxopts::value<bool>()->default_value("false") )
       ("h,help", "Print usage")
     ;
     auto opt = options.parse(argc, argv);
@@ -91,8 +94,10 @@ void parse_args(int argc, char* argv[], CONFIG &config){
     config.num = opt["num"].as<unsigned>();
     config.threads = opt["threads"].as<unsigned>();
     config.iter = opt["iter"].as<unsigned>();
+    config.batch = opt["batch"].as<unsigned>();
     config.noverify = opt["noverify"].as<bool>();
     config.usesvm = opt["usesvm"].as<bool>();
+    config.emulate = opt["emulate"].as<bool>();
   }
   catch(const cxxopts::OptionException& e){
     cerr << "Error parsing options: " << e.what() << endl;
@@ -100,7 +105,7 @@ void parse_args(int argc, char* argv[], CONFIG &config){
   }
 }
 
-void print_config(CONFIG config){
+void print_config(const CONFIG config){
   cout << endl;
   cout << "CONFIGURATION: \n";
   cout << "---------------\n";
@@ -122,6 +127,7 @@ void print_config(CONFIG config){
 
   cout << "Threads      = "<< config.threads << endl;
   cout << "Iterations   = "<< config.iter << endl;
+  cout << "Batch        = "<< config.batch << endl;
   cout << "----------------\n\n";
 }
 
@@ -129,65 +135,108 @@ void print_config(CONFIG config){
  * \brief  create random single precision complex floating point values  
  * \param  inp : pointer to float2 data of size N 
  * \param  N   : number of points in the array
- * \return true if successful
  */
-bool fpgaf_create_data(float2 *inp, unsigned num_pts){
+void create_data(float2 *inp, const unsigned num_pts){
 
-  if(inp == NULL || num_pts <= 0){
-    return false;
-  }
+  if(inp == NULL || num_pts < 4)
+    throw "Bad args in create data function";
 
   for(size_t i = 0; i < num_pts; i++){
     inp[i].x = (float)((float)rand() / (float)RAND_MAX);
     inp[i].y = (float)((float)rand() / (float)RAND_MAX);
   }
-
-  return true;
 }
 
-/**
- * \brief  compute walltime in milliseconds
- * \return time in milliseconds
- */
-double getTimeinMilliseconds(){
-   struct timespec a;
-   if(clock_gettime(CLOCK_MONOTONIC, &a) != 0){
-     fprintf(stderr, "Error in getting wall clock time \n");
-     exit(EXIT_FAILURE);
-   }
-   return (double)(a.tv_nsec) * 1.0e-6 + (double)(a.tv_sec) * 1.0E3;
-}
+void disp_results(const CONFIG config, fpga_t *runtime){
 
-void disp_results(CONFIG config, fpga_t fpga_timing, double api_t){
+  fpga_t avg_runtime = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
 
-  cout << endl << endl;
-  cout << "MEASUREMENTS in ms\n";
-  cout << "--------------\n";
-  cout << "Points                 : " << config.num << "^3\n";
-  cout << "Iterations             : " << config.iter << endl << endl;
-  cout << (config.usesvm ? "Using SVM\n":"");
+  for(unsigned i = 0; i < config.iter; i++){
+    avg_runtime.filter_exec_t += runtime[i].filter_exec_t;
+    avg_runtime.filter_pcie_wr_t += runtime[i].filter_pcie_wr_t;
+
+    avg_runtime.sig_exec_t += runtime[i].sig_exec_t;
+    avg_runtime.sig_pcie_wr_t += runtime[i].sig_pcie_wr_t;
+    avg_runtime.sig_pcie_rd_t += runtime[i].sig_pcie_rd_t;
+    avg_runtime.siginv_exec_t += runtime[i].siginv_exec_t;
+  } 
+
+  avg_runtime.filter_exec_t = avg_runtime.filter_exec_t / config.iter;
+  avg_runtime.filter_pcie_wr_t = avg_runtime.filter_pcie_wr_t / config.iter;
+  avg_runtime.sig_exec_t = avg_runtime.sig_exec_t / config.iter;
+  avg_runtime.sig_pcie_rd_t = avg_runtime.sig_pcie_rd_t / config.iter;
+  avg_runtime.sig_pcie_wr_t = avg_runtime.sig_pcie_wr_t / config.iter;
+  avg_runtime.siginv_exec_t = avg_runtime.siginv_exec_t / config.iter;
+
+  if(config.batch > 1 && config.usesvm){
+    avg_runtime.siginv_exec_t = 0.0;
+    avg_runtime.sig_pcie_rd_t = 0.0;
+    avg_runtime.sig_pcie_wr_t = 0.0;
+  }
+
+  fpga_t variance = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+  fpga_t sd = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
+
+  for(unsigned i = 0; i < config.iter; i++){
+    variance.filter_exec_t += pow(runtime[i].filter_exec_t - avg_runtime.filter_exec_t, 2);
+    variance.filter_pcie_wr_t += pow(runtime[i].filter_pcie_wr_t - avg_runtime.filter_pcie_wr_t, 2);
+    variance.sig_exec_t += pow(runtime[i].sig_exec_t - avg_runtime.sig_exec_t, 2);
+    variance.sig_pcie_rd_t += pow(runtime[i].sig_pcie_rd_t - avg_runtime.sig_pcie_rd_t, 2);
+    variance.sig_pcie_wr_t += pow(runtime[i].sig_pcie_wr_t - avg_runtime.sig_pcie_wr_t, 2);
+    variance.siginv_exec_t += pow(runtime[i].siginv_exec_t - avg_runtime.siginv_exec_t, 2);
+  }
+  sd.filter_exec_t = sqrt(variance.filter_exec_t / config.iter);
+  sd.filter_pcie_wr_t = sqrt(variance.filter_pcie_wr_t / config.iter);
+  sd.sig_exec_t = sqrt(variance.sig_exec_t / config.iter);
+  sd.sig_pcie_rd_t = sqrt(variance.sig_pcie_rd_t / config.iter);
+  sd.sig_pcie_wr_t = sqrt(variance.sig_pcie_wr_t / config.iter);
+  sd.siginv_exec_t = sqrt(variance.siginv_exec_t / config.iter);
+
+  printf("\n\n------------------------------------------\n");
+  printf("Measurements in ms\n");
+  printf("--------------------------------------------\n");
+  printf("%s", config.iter>1 ? "Average Measurements of iterations\n":"");
 
   cout << "FPGA:" << endl;
   cout << "-----" << endl;
   cout << "- Filter:" << endl;
   if(!config.usesvm)
-    cout << "  PCIe Host to Device : "<< fpga_timing.filter_pcie_wr_t << endl;
-  cout << "  Execution           : "<< fpga_timing.filter_exec_t << endl;
+    cout << "  PCIe Host to Device : "<< avg_runtime.filter_pcie_wr_t << endl;
+  cout << "  Execution           : "<< avg_runtime.filter_exec_t << endl;
   cout << endl;
 
   cout << "- Signal Convolution:" << endl;
   if(!config.usesvm)
-    cout << "  PCIe Host to Device : "<< fpga_timing.sig_pcie_wr_t << endl;
-  cout << "  FFT + Conv          : "<< fpga_timing.sig_exec_t << endl;
-  cout << "  Inverse FFT         : "<< fpga_timing.siginv_exec_t << endl;
-  cout << "  Total Computation   : "<< fpga_timing.siginv_exec_t + fpga_timing.siginv_exec_t << endl;
+    cout << "  PCIe Host to Device : "<< avg_runtime.sig_pcie_wr_t << endl;
+  cout << "  FFT + Conv          : "<< avg_runtime.sig_exec_t << endl;
+  cout << "  Inverse FFT         : "<< avg_runtime.siginv_exec_t << endl;
+  cout << "  Total Computation   : "<< (avg_runtime.sig_exec_t + avg_runtime.siginv_exec_t) << endl;
+  if(config.batch > 1)
+    cout << "  Total Comp per batch: "<< (avg_runtime.sig_exec_t + avg_runtime.siginv_exec_t) / config.batch << endl;
   if(!config.usesvm)
-    cout << "  PCIe Device to Host : "<< fpga_timing.sig_pcie_rd_t << endl;
-  cout << endl;
+    cout << "  PCIe Dev to Host    : "<< avg_runtime.sig_pcie_rd_t << endl;
 
-  cout << "- Total API Time: "<< endl;
-  cout << "  Runtime             : "<< api_t << endl;
-  cout << endl;
+  if(config.iter > 1){
+    printf("\n");
+    printf("%s", config.iter>1 ? "Deviation of runtimes among iterations\n":"");
+    
+    cout << "- Filter:" << endl;
+    if(!config.usesvm)
+      printf("PCIe Host to Dev    = %.4lfms\n", sd.filter_pcie_wr_t);
+    printf("Execution    = %.4lfms\n", sd.filter_exec_t);
+
+    cout << "- Signal:" << endl;
+    printf("FFT + Conv          = %.4lfms\n", sd.sig_exec_t);
+    printf("Inverse FFT         = %.4lfms\n", sd.siginv_exec_t);
+    printf("Total Computation   = %.4lfms\n", (sd.sig_exec_t+sd.siginv_exec_t));
+
+    if(!config.usesvm){
+      printf("PCIe Host to Dev      = %.4lfms\n", sd.sig_pcie_wr_t);
+      printf("PCIe Dev to Host      = %.4lfms\n", sd.sig_pcie_rd_t);
+    }
+    cout << endl;
+  }
+
 }
 
 void disp_results(CONFIG config, cpu_t timing_cpu){

@@ -27,7 +27,7 @@
  * \brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA for 3D Transpose
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
-fpga_t fpgaf_conv3D_svm(unsigned N, float2 *sig, float2 *filter, float2 *out) {
+fpga_t fpgaf_conv3D_svm(const unsigned N, float2 *sig, float2 *filter, float2 *out) {
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2

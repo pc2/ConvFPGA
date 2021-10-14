@@ -7,13 +7,13 @@ extern "C"{
 }
 #include "fft_conv3D.hpp"
 
-bool fpgaf_create_data(float2 *inp, unsigned N);
+void create_data(float2 *inp, const unsigned N);
 
 void parse_args(int argc, char* argv[], CONFIG &config);
 
-void print_config(CONFIG config);
+void print_config(const CONFIG config);
 
-void disp_results(CONFIG config, fpga_t fpga_timing, double api_t);
+void disp_results(const CONFIG config, fpga_t *fpga_timing);
 
 void disp_results(CONFIG config, cpu_t cpu_timing);
 

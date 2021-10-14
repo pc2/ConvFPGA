@@ -25,13 +25,12 @@
  * \brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA for 3D Transpose
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
-fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
+fpga_t fpgaf_conv3D(const unsigned N, float2 *sig, float2 *filter, float2 *out) {
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
-  if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){
+  if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0))
     return conv3D_time;
-  }
 
   // Setup kernels
   cl_kernel fetch_kernel = clCreateKernel(program, "fetch", &status);
@@ -55,7 +54,7 @@ fpga_t fpgaf_conv3D(unsigned N, float2 *sig, float2 *filter, float2 *out) {
   queue_setup();
 
   // Device memory buffers
-  unsigned num_pts = N * N * N;
+  const unsigned num_pts = N * N * N;
   cl_mem d_Buf1 = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_CHANNEL_1_INTELFPGA, sizeof(float2) * num_pts, NULL, &status);
   checkError(status, "Failed to allocate input device buffer\n");
 

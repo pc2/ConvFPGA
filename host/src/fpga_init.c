@@ -54,7 +54,7 @@ void* fpgaf_complex_malloc(const size_t sz){
           -4 Failed to create program, file not found in path
           -5 Device does not support required SVM
  */
-int fpga_initialize(const char *platform_name, const char *path, bool use_svm){
+int fpga_initialize(const char *platform_name, const char *path, const bool use_svm){
   cl_int status = 0;
 
 #ifdef VERBOSE

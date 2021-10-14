@@ -7,9 +7,11 @@ project(convolution
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
+# build external dependencies
 message("-- Building external dependencies")
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/extDep.cmake)
 
+## find Intel FPGA SDK for OpenCL
 find_package(IntelFPGAOpenCL REQUIRED)
 message("-- IntelFPGAOpenCL found")
 
@@ -26,7 +28,6 @@ add_subdirectory(host)
 
 # build kernel
 message("-- Building kernel code")
-message("  -- Generating Custom Targets")
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/genKernelTargets.cmake)
 add_subdirectory(kernels)
 

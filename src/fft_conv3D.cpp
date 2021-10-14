@@ -104,30 +104,31 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
   double filter_start = 0.0, filter_stop = 0.0;
   cpu_t timing_cpu = {0.0, 0.0, false};
 
-  for(unsigned i = 0; i < config.iter; i++){
-    bool status = fpgaf_create_data(fftwf_filter, num_pts);
-    if(!status){
-      cerr << "Error in Data Creation" << endl;
-      fftwf_free(fftwf_sig);
-      fftwf_free(fftwf_filter);
-      timing_cpu.valid = false;
-      return timing_cpu;
-    }
-    status = fpgaf_create_data(fftwf_sig, num_pts);
-    if(!status){
-      cerr << "Error in Data Creation" << endl;
-      fftwf_free(fftwf_sig);
-      fftwf_free(fftwf_filter);
-      timing_cpu.valid = false;
-      return timing_cpu;
-    }
+  bool status = fpgaf_create_data(fftwf_filter, num_pts);
+  if(!status){
+    cerr << "Error in Data Creation" << endl;
+    fftwf_free(fftwf_sig);
+    fftwf_free(fftwf_filter);
+    timing_cpu.valid = false;
+    return timing_cpu;
+  }
+  status = fpgaf_create_data(fftwf_sig, num_pts);
+  if(!status){
+    cerr << "Error in Data Creation" << endl;
+    fftwf_free(fftwf_sig);
+    fftwf_free(fftwf_filter);
+    timing_cpu.valid = false;
+    return timing_cpu;
+  }
 
-    // Filter transformation
-    filter_start = getTimeinMilliSec();
-    fftwf_execute(plan_filter);
-    filter_stop = getTimeinMilliSec();
-    
-    timing_cpu.filter_t += (filter_stop - filter_start);
+  // Filter transformation
+  filter_start = getTimeinMilliSec();
+  fftwf_execute(plan_filter);
+  filter_stop = getTimeinMilliSec();
+  timing_cpu.filter_t += (filter_stop - filter_start);
+  //cout << "  Filter Exec: " << (filter_stop - filter_start) << endl;
+
+  for(unsigned i = 0; i < config.iter; i++){
 
     // Signal Transformation
     conv_start = getTimeinMilliSec();
@@ -150,13 +151,13 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
 
     timing_cpu.conv_t += (conv_stop - conv_start);
 
-    cout << "Iter: " << i << endl;
-    cout << "  Filter Exec: " << (filter_stop - filter_start);
-    cout << "  Conv3D Exec: " << (conv_stop - conv_start);
-    cout << endl;
+    //cout << "Iter: " << i << endl;
+    //cout << "  Conv3D Exec: " << (conv_stop - conv_start);
+    //cout << endl;
   }
 
-  timing_cpu.filter_t = timing_cpu.filter_t / config.iter;
+  timing_cpu.filter_t = timing_cpu.filter_t;
+  //timing_cpu.filter_t = timing_cpu.filter_t / config.iter;
   timing_cpu.conv_t = timing_cpu.conv_t / config.iter;
 
   cleanup_plans();
