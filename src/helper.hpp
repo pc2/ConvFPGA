@@ -7,6 +7,8 @@ extern "C"{
 }
 #include "fft_conv3D.hpp"
 
+void create_data(float2 *inp, const unsigned N, const unsigned batch);
+
 void create_data(float2 *inp, const unsigned N);
 
 void parse_args(int argc, char* argv[], CONFIG &config);

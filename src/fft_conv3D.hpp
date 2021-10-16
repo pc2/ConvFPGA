@@ -30,6 +30,6 @@ typedef struct cpu_timing {
 
 cpu_t fft_conv3D_cpu(struct CONFIG& config);
 
-bool fft_conv3D_cpu_verify(struct CONFIG& config, const float2 *sig, const float2 *filter, float2 *out);
+bool fft_conv3D_cpu_verify(struct CONFIG& config, float2 *sig, float2 *filter, float2 *out);
 
 #endif 

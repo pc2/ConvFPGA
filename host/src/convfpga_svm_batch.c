@@ -31,9 +31,8 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2
-  if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0)){
+  if(sig == NULL || filter == NULL || out == NULL || ( (N & (N-1)) !=0))
     return conv3D_time;
-  }
 
   // Setup kernels
   cl_kernel fetch_kernel = clCreateKernel(program, "fetch", &status);
@@ -97,18 +96,19 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
   checkError(status, "Failed to unmap input data");
 
   // Step 2: Transform filter: Buf1 -> Buf2 -> Buf1
-  int inverse_int = 0;
-  int use_svm = 1;
+  int inverse_int_a = 0;
+  int inverse_int_b = 0;
+  int use_svm_a = 1;
   status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)filter_inData);
   checkError(status, "Failed to set fetch kernel arg");
   status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch kernel arg 1");
-  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
   checkError(status, "Failed to set transpose3D kernel arg 2");
 
-  status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+  status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
   checkError(status, "Failed to set ffta kernel arg");
-  status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+  status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
   checkError(status, "Failed to set fftb kernel arg");
 
   // - Writing to Buf2 from Buf1 before transpose
@@ -120,18 +120,18 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
   status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
   checkError(status, "Failed to set transpose3D kernel arg 2");
 
-  status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+  status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
   checkError(status, "Failed to set fftc kernel arg");
 
   int chan_out = CHAN_NOT_OUT;
-  use_svm = 0;
+  int use_svm_b = 0;
   status = clSetKernelArgSVMPointer(store_kernel, 0, (void *)filter_outData);
   checkError(status, "Failed to set store kernel arg 0");
   status=clSetKernelArg(store_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set store kernel arg 1");
   status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
   checkError(status, "Failed to set store kernel arg 2");
-  status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+  status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm_b);
   checkError(status, "Failed to set store kernel arg 3");
 
   // Kernel Execution
@@ -199,7 +199,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     clSVMFree(context, filter_outData);
 
   // Step 3: Transform Signal and stream to convolution kernel
-  //                             Buf3 (Filter)
+  //                             Buf1 (Filter)
   //                              |
   //  Buf1 -> Buf2 -> chanout -> .* -> Buf4 
 
@@ -233,20 +233,20 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
   }
 
   /*
-   * First phase of FFT3D
+   * First phase of FFT3D i.e. until Transpose3D
    */
-  use_svm = 1;
-  inverse_int = 0;
+  use_svm_a = 1;
+  inverse_int_a = 0;
   status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData[0]);
   checkError(status, "Failed to set fetch kernel arg");
   status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
   checkError(status, "Failed to set fetch kernel arg 1");
-  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+  status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
   checkError(status, "Failed to set transpose3D kernel arg 2");
 
-  status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+  status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
   checkError(status, "Failed to set ffta kernel arg");
-  status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+  status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
   checkError(status, "Failed to set fftb kernel arg");
 
   // - Writing to Buf2 from SVM Host before transpose
@@ -294,21 +294,22 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
   double total_temp = temp;
 
   for(size_t i = 1; i < how_many; i+=2){
+    printf("Batch: %lu\n", i);
     /*
-    * Overlap: FFT+conv with first phase of second batch
+    * Overlap FFT+conv with the first phase of the second batch of input
     */
-    use_svm = 1;
-    inverse_int = 0;
+    use_svm_a = 1;
+    inverse_int_a = 0;
     status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData[i]);
     checkError(status, "Failed to set fetch kernel arg");
     status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
     checkError(status, "Failed to set fetch kernel arg 1");
-    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set ffta kernel arg");
-    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set fftb kernel arg");
 
     mode = BATCH;
@@ -319,9 +320,10 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
+    inverse_int_b = 0;
     chan_out = CHAN_OUT;
-    use_svm = 0;
-    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    use_svm_b = 0;
+    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int_b);
     checkError(status, "Failed to set fftc kernel arg");
 
     status = clSetKernelArgSVMPointer(store_kernel, 0, (void *)h_outData[i]);
@@ -330,7 +332,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     checkError(status, "Failed to set store kernel arg 1");
     status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
     checkError(status, "Failed to set store kernel arg 2");
-    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm_b);
     checkError(status, "Failed to set store kernel arg 3");
 
     status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
@@ -388,18 +390,18 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     total_temp += temp;
 
     // Step 3: Inv FFT3D first phase: second phase of second batch
-    use_svm = 0;
-    inverse_int = 1;
+    use_svm_a = 0;
+    inverse_int_a = 1;
     status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData[i]);
     checkError(status, "Failed to set fetch kernel arg");
     status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf3);
     checkError(status, "Failed to set fetch kernel arg 1");
-    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set ffta kernel arg");
-    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set fftb kernel arg");
 
     mode = BATCH;
@@ -410,10 +412,10 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    inverse_int = 0;
+    inverse_int_b = 0;
     chan_out = CHAN_OUT;
-    use_svm = 0;
-    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    use_svm_b = 0;
+    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int_b);
     checkError(status, "Failed to set fftc kernel arg");
     status = clSetKernelArgSVMPointer(store_kernel, 0, (void*)h_outData[i]);
     checkError(status, "Failed to set store kernel arg");
@@ -421,7 +423,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     checkError(status, "Failed to set store kernel arg");
     status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
     checkError(status, "Failed to set store kernel arg 1");
-    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm_b);
     checkError(status, "Failed to set store kernel arg 3");
     
     status=clSetKernelArg(conv3D_kernel, 0, sizeof(cl_mem), (void *)&d_Buf1);
@@ -481,18 +483,18 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     /*
     *  First batch final and second batch ifft
     */
-    use_svm = 0;
-    inverse_int = 1;
+    use_svm_a = 0;
+    inverse_int_a = 1;
     status = clSetKernelArgSVMPointer(fetch_kernel, 0, (void *)h_inData[i]);
     checkError(status, "Failed to set fetch kernel arg");
     status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf3);
     checkError(status, "Failed to set fetch kernel arg 1");
-    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+    status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set ffta kernel arg");
-    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
     checkError(status, "Failed to set fftb kernel arg");
 
     mode = BATCH;
@@ -503,12 +505,12 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    inverse_int = 1;
-    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    inverse_int_b = 1;
+    chan_out = CHAN_NOT_OUT;
+    use_svm_b = 1;
+    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int_b);
     checkError(status, "Failed to set fftc kernel arg");
 
-    chan_out = CHAN_NOT_OUT;
-    use_svm = 1;
     // kernel stores using SVM based PCIe to host
     status = clSetKernelArgSVMPointer(store_kernel, 0, (void*)h_outData[i-1]);
     checkError(status, "Failed to set store kernel arg");
@@ -516,7 +518,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     checkError(status, "Failed to set store kernel arg");
     status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
     checkError(status, "Failed to set store kernel arg 1");
-    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm_b);
     checkError(status, "Failed to set store kernel arg 3");
 
     status = clEnqueueTask(queue7, store_kernel, 0, NULL, &endExec_event);
@@ -564,8 +566,8 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     /* Final Output with start of next batch
     */
     chan_out = CHAN_NOT_OUT;
-    use_svm = 1;
-    inverse_int = 0;
+    use_svm_a = 1;
+    inverse_int_a = 0;
 
     // - Writing to Buf2 from SVM Host before transpose
     if(i == (how_many - 1)){
@@ -576,12 +578,12 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
       checkError(status, "Failed to set fetch kernel arg");
       status=clSetKernelArg(fetch_kernel, 1, sizeof(cl_mem), (void *)&d_Buf1);
       checkError(status, "Failed to set fetch kernel arg 1");
-      status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm);
+      status=clSetKernelArg(fetch_kernel, 2, sizeof(cl_int), (void*)&use_svm_a);
       checkError(status, "Failed to set transpose3D kernel arg 2");
 
-      status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+      status=clSetKernelArg(ffta_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
       checkError(status, "Failed to set ffta kernel arg");
-      status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+      status=clSetKernelArg(fftb_kernel, 0, sizeof(cl_int), (void*)&inverse_int_a);
       checkError(status, "Failed to set fftb kernel arg");
       mode = BATCH;
     }
@@ -592,8 +594,9 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     status=clSetKernelArg(transpose3D_kernel, 2, sizeof(cl_int), (void*)&mode);
     checkError(status, "Failed to set transpose3D kernel arg 2");
 
-    inverse_int = 1;
-    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int);
+    use_svm_b = 1;
+    inverse_int_b = 1;
+    status=clSetKernelArg(fftc_kernel, 0, sizeof(cl_int), (void*)&inverse_int_b);
     checkError(status, "Failed to set fftc kernel arg");
     // kernel stores using SVM based PCIe to host
     status = clSetKernelArgSVMPointer(store_kernel, 0, (void*)h_outData[i]);
@@ -602,7 +605,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     checkError(status, "Failed to set store kernel arg");
     status=clSetKernelArg(store_kernel, 2, sizeof(cl_int), (void *)&chan_out);
     checkError(status, "Failed to set store kernel arg 1");
-    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm);
+    status=clSetKernelArg(store_kernel, 3, sizeof(cl_int), (void *)&use_svm_b);
     checkError(status, "Failed to set store kernel arg 3");
 
     // Kernel Execution
@@ -615,7 +618,7 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     status = clEnqueueTask(queue5, transpose3D_kernel, 0, NULL, &startExec_event);
     checkError(status, "Failed to launch transpose3D kernel");
 
-    if(i != how_many - 1){
+    if(i != (how_many - 1)){
       status = clEnqueueTask(queue4, fftb_kernel, 0, NULL, NULL);
       checkError(status, "Failed to launch second fft kernel");
 
@@ -673,6 +676,13 @@ fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, flo
     clSVMFree(context, h_outData[i]);
   }
 
+  /*
+  printf("Output\n");
+  for(unsigned i = 0; i < how_many * num_pts; i++){
+    printf("%u: (%f, %f)\n", i, out[i].x, out[i].y);
+  }
+  printf("\n");
+  */
   queue_cleanup();
 
   if (d_Buf1)

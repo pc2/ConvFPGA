@@ -48,11 +48,9 @@ int main(int argc, char* argv[]){
   const unsigned num = conv_config.num;
   const unsigned batch = conv_config.batch;
 
-  const size_t filter_numpts = num * num * num;
-  const size_t filter_inp_sz = sizeof(float2) * num * num * num;
-
-  const size_t sig_numpts = num * num * num * batch;
-  const size_t sig_sz = sizeof(float2) * num * num * num * batch;
+  const unsigned numpts = num * num * num;
+  const size_t filter_inp_sz = sizeof(float2) * numpts;
+  const size_t sig_sz = sizeof(float2) * numpts * batch;
 
   float2 *filter = (float2*)fpgaf_complex_malloc(filter_inp_sz);
   float2 *sig = (float2*)fpgaf_complex_malloc(sig_sz);
@@ -60,8 +58,8 @@ int main(int argc, char* argv[]){
   fpga_t runtime[conv_config.iter];
 
   try{
-    create_data(filter, filter_numpts);
-    create_data(sig, sig_numpts);
+    create_data(filter, numpts);
+    create_data(sig, numpts, batch);
 
     for(unsigned i = 0; i < conv_config.iter; i++){
       cout << endl << i << ": Calculating Conv3D" << endl;
