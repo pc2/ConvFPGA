@@ -15,17 +15,24 @@ using namespace std;
 
 static fftwf_plan plan_filter, plan_sig, plan_inv_sig;
 
+/**
+ * \brief  Destroy FFTW plans created for CPU convolution
+ */
 static void cleanup_plans(){
   fftwf_destroy_plan(plan_sig);
   fftwf_destroy_plan(plan_filter);
   fftwf_destroy_plan(plan_inv_sig);
 }
 
+/**
+ * \brief  Fill input array with random numbers
+ * \param  inp: pointer to fftw single precision complex array (fftwf)
+ * \param  num_pts: size of the array
+ */
 static bool fpgaf_create_data(fftwf_complex *inp, const unsigned num_pts){
 
-  if(inp == NULL || num_pts <= 0){
+  if(inp == NULL || num_pts <= 0)
     return false;
-  }
 
   for(size_t i = 0; i < num_pts; i++){
     inp[i][0] = (float)((float)rand() / (float)RAND_MAX);
@@ -35,7 +42,11 @@ static bool fpgaf_create_data(fftwf_complex *inp, const unsigned num_pts){
   return true;
 }
 
-// Convolution implementation
+/**
+ * \brief  CPU implementation of FFT-based 3D convolution
+ * \param  config: struct that defines the configuration of the conv 
+ * \retval cpu_t : cpu timing struct 
+ */
 cpu_t fft_conv3D_cpu(struct CONFIG& config){
 
   unsigned num = config.num;
@@ -151,13 +162,9 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
 
     timing_cpu.conv_t += (conv_stop - conv_start);
 
-    //cout << "Iter: " << i << endl;
-    //cout << "  Conv3D Exec: " << (conv_stop - conv_start);
-    //cout << endl;
   }
 
   timing_cpu.filter_t = timing_cpu.filter_t;
-  //timing_cpu.filter_t = timing_cpu.filter_t / config.iter;
   timing_cpu.conv_t = timing_cpu.conv_t / config.iter;
 
   cleanup_plans();
@@ -169,7 +176,13 @@ cpu_t fft_conv3D_cpu(struct CONFIG& config){
   return timing_cpu;
 }
 
-// Verification Function for FPGA 3D Convolution
+/**
+ * \brief  CPU implementation of FFT-based 3D convolution for verification
+ * \param  config: struct that defines the configuration of the conv 
+ * \param  sig: pointer to signal array
+ * \param  filter: pointer to filter array
+ * \retval bool: true if verified to be correct
+ */
 bool fft_conv3D_cpu_verify(struct CONFIG& config, float2 *sig, float2 *filter, float2 *fpgaout){
 
   unsigned num = config.num;

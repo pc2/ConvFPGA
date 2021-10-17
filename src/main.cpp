@@ -58,7 +58,7 @@ int main(int argc, char* argv[]){
   fpga_t runtime[conv_config.iter];
 
   try{
-    create_data(filter, numpts);
+    create_data(filter, numpts, 1);
     create_data(sig, numpts, batch);
 
     for(unsigned i = 0; i < conv_config.iter; i++){

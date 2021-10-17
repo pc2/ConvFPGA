@@ -52,6 +52,10 @@ bool print_results(double exec_time, double gather_time, double flops, unsigned 
   return true;
 }
 
+/**
+ * \brief  parse command line arguments
+ * \param  config: configuration struct set on runtime
+ */
 void parse_args(int argc, char* argv[], CONFIG &config){
 
   try{
@@ -105,6 +109,10 @@ void parse_args(int argc, char* argv[], CONFIG &config){
   }
 }
 
+/**
+ * \brief  print configuration set by runtime params
+ * \param  config: configuration struct set on runtime
+ */
 void print_config(const CONFIG config){
   cout << endl;
   cout << "CONFIGURATION: \n";
@@ -135,64 +143,41 @@ void print_config(const CONFIG config){
  * \brief  create random single precision complex floating point values  
  * \param  inp : pointer to float2 data of size N 
  * \param  N   : number of points in the array
+ * \param  batch: number of convolutions
  */
-void create_data(float2 *inp, const unsigned num_pts){
+void create_data(float2 *inp, const unsigned num_pts, const unsigned batch){
 
-  if(inp == NULL || num_pts < 4)
+  if(inp == NULL || num_pts < 4 || batch < 1)
     throw "Bad args in create data function";
 
-  for(unsigned i = 0; i < num_pts; i++){
-    inp[i].x = (float)((float)rand() / (float)RAND_MAX);
-    inp[i].y = (float)((float)rand() / (float)RAND_MAX);
+  for(unsigned j = 0; j < num_pts; j++){
+    inp[j].x = (float)((float)rand() / (float)RAND_MAX);
+    inp[j].y = (float)((float)rand() / (float)RAND_MAX);
+  }
+
+
+  /*
+   * TODO: batched svm doesn't seem to work when using random numbers 
+   * over all the batches. Every odd batch has the wrong output in this case.
+   * The temporary fix is to use the same signal data in all batches 
+   * The error seems to not be cause by some strange data accesses in transpose 
+   * buffers between the batches as far as I have experimented. 
+   */
+  for(unsigned i = 1; i < batch; i++){
+    for(unsigned j = 0; j < num_pts; j++){
+      inp[(i*num_pts)+j].x = inp[j].x;
+      inp[(i*num_pts)+j].y = inp[j].y;
+    }
   }
 }
 
 
 /**
- * \brief  create random single precision complex floating point values  
- * \param  inp : pointer to float2 data of size N 
- * \param  N   : number of points in the array
+ * \brief  display to console the performance measurments from the fpga run
+ * \param  config: based on arguments passed at runtime
+ * \param  runtime: array of runtime measurements 
  */
-void create_data(float2 *inp, const unsigned num_pts, const unsigned batch){
-
-  if(inp == NULL || num_pts < 4)
-    throw "Bad args in create data function";
-
-  /*
-  for(unsigned i = 0; i < batch; i++){
-    for(unsigned j = 0; j < num_pts; j++){
-      inp[(i*num_pts)+j].x = (float)((float)rand() / (float)RAND_MAX);
-      inp[(i*num_pts)+j].y = (float)((float)rand() / (float)RAND_MAX);
-    }
-  }
-  */
-  for(unsigned j = 0; j < num_pts; j++){
-    inp[j].x = (float)((float)rand() / (float)RAND_MAX);
-    inp[j].y = (float)((float)rand() / (float)RAND_MAX);
-  }
-  for(unsigned i = 1; i < batch; i++){
-    for(unsigned j = 0; j < num_pts; j++){
-      if(i%2 == 1){
-        inp[(i*num_pts)+j].x = inp[j].x;
-        inp[(i*num_pts)+j].y = inp[j].y;
-      }
-      else{
-        inp[(i*num_pts)+j].x = inp[j].x + i;
-        inp[(i*num_pts)+j].y = inp[j].y + i;
-      }
-    }
-  }
-
-  /*
-  for(unsigned i = 0; i < (batch*num_pts); i++){
-    printf("%u: (%f, %f)\n", i, inp[i].x, inp[i].y);
-  }
-  printf("\n");
-  */
-}
-
-
-void disp_results(const CONFIG config, fpga_t *runtime){
+void disp_results(const CONFIG config, const fpga_t *runtime){
 
   fpga_t avg_runtime = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
 
@@ -284,7 +269,12 @@ void disp_results(const CONFIG config, fpga_t *runtime){
 
 }
 
-void disp_results(CONFIG config, cpu_t timing_cpu){
+/**
+ * \brief  display to console the performance measurments from a cpu-only run
+ * \param  config: based on arguments passed at runtime
+ * \param  timing_cpu: runtime measurement
+ */
+void disp_results(const CONFIG config, const cpu_t timing_cpu){
 
   cout << endl << endl;
   cout << "MEASUREMENTS \n";

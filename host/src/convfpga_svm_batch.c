@@ -24,10 +24,16 @@
 
 
 /**
- * \brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA for 3D Transpose
+ * \brief  compute an FFT-based 3D Convolution on the FPGA and use SVM for 
+ *         data transfers between the host and the device
+ * \param  N : number of points in the array to compute
+ * \param  sig : pointer to signal array
+ * \param  filter : pointer to filter array
+ * \param  out : pointer to output array
+ * \param  how_many : number of 3d convolutions to compute
  * \return fpga_t : time taken in milliseconds for data transfers and execution
  */
-fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, float2 *out, const unsigned how_many) {
+fpga_t fpgaf_conv3D_svm_batch(const unsigned N, const float2 *sig, const float2 *filter, float2 *out, const unsigned how_many) {
   fpga_t conv3D_time = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0};
   cl_int status = 0;
   // if N is not a power of 2

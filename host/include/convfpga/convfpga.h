@@ -30,49 +30,18 @@ typedef struct fpga_timing {
   double sig_exec_t;    /**< Kernel execution time from CPU wall clock time */
   double siginv_exec_t;  /**< Kernel execution time from CPU wall clock time */
 
-  //double svm_copyin_t;    /**< Time to copy in data to SVM */
-  //double svm_copyout_t;   /**< Time to copy data out of SVM */ 
   bool valid;             /**< Represents true signifying valid execution */
 } fpga_t;
 
-/** 
- * @brief Initialize FPGA
- * @param platform_name: name of the OpenCL platform
- * @param path         : path to binary
- * @param use_svm      : 1 if true 0 otherwise
- * @return 0 if successful 
-          -1 Path to binary missing
-          -2 Unable to find platform passed as argument
-          -3 Unable to find devices for given OpenCL platform
-          -4 Failed to create program, file not found in path
-          -5 Device does not support required SVM
- */
 extern int fpga_initialize(const char *platform_name, const char *path, const bool use_svm);
 
-/** 
- * @brief Release FPGA Resources
- */
 extern void fpga_final();
 
-/** 
- * @brief Allocate memory of single precision complex floating points
- * @param sz  : size_t : size to allocate
- * @return void ptr or NULL
- */
 extern void* fpgaf_complex_malloc(const size_t sz);
 
-/**
- * @brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA
- * @return fpga_t : time taken in milliseconds for data transfers and execution
- */
-extern fpga_t fpgaf_conv3D(const unsigned N, float2 *sig, float2 *filter, float2 *out);
+extern fpga_t fpgaf_conv3D(const unsigned N, const float2 *sig, const float2 *filter, float2 *out);
 
-/**
- * @brief  compute an out-of-place single precision complex 3D-FFT using the DDR of the FPGA and Shared Virtual Memory for Host to Device Communication
- * @param  interleaving  : toggle interleaved device memory
- * @return fpga_t : time taken in milliseconds for data transfers and execution
- */
-extern fpga_t fpgaf_conv3D_svm(const unsigned N, float2 *sig, float2 *filter, float2 *out);
+extern fpga_t fpgaf_conv3D_svm(const unsigned N, const float2 *sig, const float2 *filter, float2 *out);
 
-extern fpga_t fpgaf_conv3D_svm_batch(const unsigned N, float2 *sig, float2 *filter, float2 *out, const unsigned how_many);
+extern fpga_t fpgaf_conv3D_svm_batch(const unsigned N, const float2 *sig, const float2 *filter, float2 *out, const unsigned how_many);
 #endif
