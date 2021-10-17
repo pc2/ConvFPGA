@@ -2,7 +2,7 @@ build*/
 debug*/
 bin/
 vscode/
-scripts/
+scripts/slurm/
 wisdom/
 data/
 
