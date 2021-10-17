@@ -34,9 +34,3 @@ add_subdirectory(kernels)
 # build source code
 message("-- Building source code")
 add_subdirectory(src)
-
-# build tests
-message("-- Building tests")
-add_subdirectory(tests)
-enable_testing()
-
