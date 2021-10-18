@@ -41,7 +41,7 @@ You have built the *API* i.e., the OpenCL host code that invokes different trans
 - `convfpga/convfpga.h` header file
 - `convolution` - an application which links and includes the above two.
 
-Now, for the real deal, synthesizing the OpenCL Convolution kernels. These can be synthesized to run on software emulation or on hardware as bitstreams.
+Now onto synthesizing the OpenCL Convolution kernels. These can be synthesized to run on software emulation or on hardware as bitstreams.
 
 - Emulation
 
@@ -57,7 +57,7 @@ make <kernel_name>_syn
 make conv3D_syn
 ```
 
-Putting them all together, set the path to the synthesized bitstream along with other correct configurations as command line parameters to the sample application generated, to execute the transformation.
+Putting them all together, in order to execute the required convolution, set the path to the synthesized bitstream along with other correct configurations as command line parameters to the sample application generated.
 
 ```bash
 ./convolution --num=64 --path=conv3d.aocx
@@ -69,8 +69,8 @@ For explanations regarding the command line options and the OpenCL kernels, chec
 
 ## Related Repositories
 
-- FFTFPGA - an OpenCL based library for Fast Fourier Transformations for FPGAs
-- FFTFPGA-eval
+- [FFTFPGA](https://github.com/pc2/fft3d-fpga) - an OpenCL based library for Fast Fourier Transformations for FPGAs
+- [FFTFPGA-eval](https://git.uni-paderborn.de/arjunr/fftfpga-eval) - archives reports and measurements from FFTFPGA and ConvFPGA
 
 ## Contact
 
