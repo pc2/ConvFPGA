@@ -1,0 +1,14 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## Unreleased
+
+- add tests
+- integration conv3d verification and execution into the same function 
+
+## [1.0.0] - [18.10.2021]
+
+- FFT-based 3D Convolution implementations on Intel FPGAs and CPU
+- Using OpenCL Shared Virtual Memory (SVM) for data transfers between FPGA and host
+- Batched 3D Convolution to schedule multiple runs by overlapping data transfers and computation
