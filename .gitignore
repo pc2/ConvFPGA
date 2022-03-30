@@ -2,7 +2,9 @@ build*/
 debug*/
 bin/
 vscode/
-scripts/
+scripts/slurm/
+wisdom/
+data/
 
 tags
 *.DS_Store
